@@ -1,0 +1,96 @@
+from pydantic import BaseModel, Field
+from typing import Optional, List
+from datetime import datetime
+
+
+class KnowledgeUploadResponse(BaseModel):
+    id: str
+    title: str
+    category: str
+    file_type: str
+    status: str
+
+
+class KnowledgeItem(BaseModel):
+    id: str
+    title: str
+    summary: Optional[str] = None
+    category: str
+    category_name: Optional[str] = None
+    source: Optional[str] = None
+    tags: List[str] = []
+    view_count: int = 0
+    favorite_count: int = 0
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class KnowledgeDetail(KnowledgeItem):
+    content: Optional[str] = None  # 内容从ES获取，此处可能为空
+    file_path: Optional[str] = None
+    file_type: Optional[str] = None
+    is_favorited: bool = False
+    updated_at: datetime
+
+
+class KnowledgeListResponse(BaseModel):
+    items: List[KnowledgeItem]
+    total: int
+    page: int
+    page_size: int
+
+
+class KnowledgeCreate(BaseModel):
+    title: str
+    content: str
+    summary: Optional[str] = None
+    category: str = Field(..., pattern="^(law|tech|case|policy)$")
+    source: Optional[str] = None
+    tags: Optional[List[str]] = []
+
+
+class KnowledgeUpdate(BaseModel):
+    title: Optional[str] = None
+    category: Optional[str] = Field(None, pattern="^(law|tech|case|policy)$")
+    source: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+
+class SearchResponse(BaseModel):
+    items: List[dict]
+    total: int
+    page: int
+    page_size: int
+    search_type: str = "keyword"
+
+
+class HotKnowledgeItem(BaseModel):
+    id: str
+    title: str
+    view_count: int
+    category: str
+
+
+class LatestKnowledgeItem(BaseModel):
+    id: str
+    title: str
+    created_at: datetime
+    category: str
+
+
+class CommentCreate(BaseModel):
+    content: str
+
+
+class CommentItem(BaseModel):
+    id: str
+    knowledge_id: str
+    user_id: str
+    user_name: Optional[str] = None
+    content: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
