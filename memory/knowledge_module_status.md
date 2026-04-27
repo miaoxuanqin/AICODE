@@ -12,9 +12,22 @@ lastUpdated: 2026-04-27
 ## 开发进度
 - 需求分析：✅ 已完成
 - 详细设计：✅ 已完成
-- 后端开发：✅ 已完成
+- 后端开发：✅ 已完成（知识库 + 问答助手）
 - 前端开发：✅ 详情页、搜索门户、管理页面均已完成
 - 联调测试：✅ 主要功能已完成
+
+## 新增模块：图谱增强问答（2026-04-27）
+
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| 高保真原型 | ✅ 完成 | GraphQAChat.vue |
+| 图谱可视化 | ✅ 完成 | SVG 交互式图谱 |
+| 推理路径展示 | ✅ 完成 | 可折叠推理步骤 |
+| 节点交互 | ✅ 完成 | 点击选中、高亮关联 |
+| 路由注册 | ✅ 完成 | /assistant/graph |
+| Neo4j 部署 | ✅ 完成 | Docker 部署在 WSL |
+| 后端 API | 🔶 待开发 | Graph API |
+| Neo4j 数据模型 | 🔶 待开发 | 节点和关系类型定义 |
 
 ## 已完成文件
 
@@ -46,6 +59,7 @@ lastUpdated: 2026-04-27
 | `src/views/assistant/SuperviseAssistant.vue` | 工程监管助手 |
 | `src/components/layout/MainLayout.vue` | 已添加知识管理菜单 |
 | `src/router/index.js` | 路由守卫 |
+| `src/views/graph/GraphQAChat.vue` | **图谱增强问答页面** |
 
 ## 数据库表
 ```sql
@@ -197,3 +211,6 @@ const superviseSessions = sessionsData.items.filter(s => s.category === 'supervi
 3. 性能优化（缓存、预热）
 4. 向量搜索效果优化（embedding 模型升级）
 5. 前端详情页加载优化（大数据量渲染卡顿）
+6. **图谱增强问答后端 API 开发**
+7. **图谱增强问答 Neo4j 数据模型**
+8. **图谱数据填充与前后端对接**

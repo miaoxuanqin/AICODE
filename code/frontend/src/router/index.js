@@ -45,6 +45,12 @@ const routes = [
         meta: { title: '工程监管助手', icon: 'Monitor' }
       },
       {
+        path: 'assistant/graph',
+        name: 'GraphQA',
+        component: () => import('@/views/graph/GraphQAChat.vue'),
+        meta: { title: '图谱增强问答', icon: 'Connection' }
+      },
+      {
         path: 'qa/chat',
         name: 'QAChat',
         component: () => import('@/views/qa/QAChat.vue'),

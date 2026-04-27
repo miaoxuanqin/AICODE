@@ -42,6 +42,10 @@
             <el-icon><Monitor /></el-icon>
             <span>工程监管助手</span>
           </el-menu-item>
+          <el-menu-item index="/assistant/graph">
+            <el-icon><Connection /></el-icon>
+            <span>图谱增强问答</span>
+          </el-menu-item>
         </el-sub-menu>
 
         <el-menu-item index="/qa/chat">

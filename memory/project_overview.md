@@ -13,7 +13,8 @@ originSessionId: c9493d03-2404-41fa-8b7b-c4643b1160bc
 - 后端：FastAPI + SQLAlchemy + MySQL + Redis
 - 前端：Vue3 + Element Plus + Vue Router + Pinia
 - 搜索引擎：Elasticsearch 8.13
-- 向量库：Qdrant（暂未接入）
+- 向量库：Qdrant
+- 图数据库：Neo4j（2026-04-27 新增）
 - 文件存储：MinIO (S3兼容)
 
 ## 外部服务地址
@@ -24,6 +25,7 @@ originSessionId: c9493d03-2404-41fa-8b7b-c4643b1160bc
 | Elasticsearch | 172.20.36.91:9200 |
 | Qdrant | 172.20.36.91:6333 |
 | MinIO | 172.20.36.91:9000 |
+| Neo4j | 172.20.36.91:7474 |
 
 ## LLM 配置（已接入，embedding 暂未使用）
 | 配置项 | 值 |
@@ -65,6 +67,7 @@ code/
 2. 手动添加知识（富文本编辑器，支持加粗/斜体/列表等格式）
 3. 知识 CRUD（MySQL存元数据+摘要，ES存完整内容）
 4. 全文搜索（Elasticsearch keyword）
-5. 语义搜索（Qdrant向量，embedding代码已写但未接入）
+5. 语义搜索（Qdrant向量，已接入）
 6. 热搜词统计（Redis sorted set）
 7. 收藏、评论功能
+8. 图谱增强问答（Graph-RAG，多跳推理，可视化推理路径）
