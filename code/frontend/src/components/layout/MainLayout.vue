@@ -3,7 +3,7 @@
     <!-- 侧边栏 -->
     <el-aside :width="isCollapsed ? '64px' : '220px'" class="sidebar">
       <div class="logo">
-        <el-icon v-if="!isCollapsed" :size="28" color="#409eff"><OfficeBuilding /></el-icon>
+        <el-icon v-if="!isCollapsed" :size="28" color="#daa520"><OfficeBuilding /></el-icon>
         <span v-if="!isCollapsed">住建知识库</span>
         <el-icon v-else><OfficeBuilding /></el-icon>
       </div>
@@ -179,8 +179,8 @@ onMounted(() => {
 }
 
 .sidebar {
-  background: #fff;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
+  background: linear-gradient(180deg, #1a3a6b 0%, #2c5282 100%);
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
   transition: width 0.3s;
   overflow-x: hidden;
 }
@@ -193,17 +193,55 @@ onMounted(() => {
   gap: 8px;
   font-size: 18px;
   font-weight: 600;
-  color: #409eff;
-  border-bottom: 1px solid #eee;
+  color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.logo img {
-  width: 32px;
-  height: 32px;
+.logo .el-icon {
+  color: #daa520;
 }
 
 .sidebar-menu {
   border-right: none;
+  background: transparent;
+}
+
+.sidebar-menu:not(.el-menu--collapse) {
+  width: 220px;
+}
+
+/* 菜单样式 */
+:deep(.el-menu) {
+  background: transparent;
+  border: none;
+}
+
+:deep(.el-sub-menu__title),
+:deep(.el-menu-item) {
+  color: rgba(255, 255, 255, 0.85);
+  height: 50px;
+  line-height: 50px;
+}
+
+:deep(.el-sub-menu__title:hover),
+:deep(.el-menu-item:hover) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+:deep(.el-menu-item.is-active) {
+  background: linear-gradient(90deg, rgba(184, 134, 11, 0.3) 0%, rgba(184, 134, 11, 0.1) 100%);
+  color: #fff;
+  border-right: 3px solid #daa520;
+}
+
+:deep(.el-sub-menu .el-menu-item.is-active) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+:deep(.el-sub-menu__title .el-icon),
+:deep(.el-menu-item .el-icon) {
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .header {
@@ -212,7 +250,8 @@ onMounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 8px rgba(26, 58, 107, 0.08);
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .header-left {
@@ -224,7 +263,7 @@ onMounted(() => {
 .collapse-btn {
   font-size: 20px;
   cursor: pointer;
-  color: #606266;
+  color: #1a3a6b;
 }
 
 .header-right {
@@ -239,7 +278,7 @@ onMounted(() => {
 .header-icon {
   font-size: 20px;
   cursor: pointer;
-  color: #606266;
+  color: #1a3a6b;
 }
 
 .user-info {
@@ -248,15 +287,16 @@ onMounted(() => {
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 4px;
+  color: #1a3a6b;
 }
 
 .user-info:hover {
-  background: #f5f7fa;
+  background: #f0f4f8;
 }
 
 .main-content {
   padding: 20px;
-  background: #f5f7fa;
+  background: #f0f4f8;
   overflow-y: auto;
 }
 </style>

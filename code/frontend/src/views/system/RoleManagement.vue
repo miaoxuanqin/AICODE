@@ -302,7 +302,7 @@ const handleDeleteRole = async () => {
 
 .role-item.active {
   background: #ecf5ff;
-  border-left: 3px solid #409eff;
+  border-left: 3px solid #1a3a6b;
 }
 
 .role-info {

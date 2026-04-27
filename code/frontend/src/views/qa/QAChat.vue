@@ -742,7 +742,7 @@ onMounted(async () => {
 }
 
 .message.user .message-body {
-  background: #409eff;
+  background: #1a3a6b;
   color: #fff;
 }
 
@@ -873,7 +873,7 @@ onMounted(async () => {
 
 .session-item.active {
   background: #ecf5ff;
-  border-left: 3px solid #409eff;
+  border-left: 3px solid #1a3a6b;
 }
 
 .session-info {
@@ -925,7 +925,7 @@ onMounted(async () => {
 .stat-value {
   font-size: 28px;
   font-weight: 600;
-  color: #409eff;
+  color: #1a3a6b;
 }
 
 .stat-label {
@@ -950,7 +950,7 @@ onMounted(async () => {
 }
 
 .hot-item:hover {
-  color: #409eff;
+  color: #1a3a6b;
 }
 
 .hot-rank {

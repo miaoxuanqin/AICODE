@@ -244,7 +244,8 @@
       "Bash(taskkill //F //PID 17968)",
       "Bash(taskkill //F //PID 24036)",
       "Bash(taskkill //F //PID 14268)",
-      "Bash(taskkill //F //PID 5732)"
+      "Bash(taskkill //F //PID 5732)",
+      "Bash(git reset *)"
     ],
     "additionalDirectories": [
       "c:\\AICODE3"

@@ -292,7 +292,7 @@ onMounted(() => {
 }
 
 .search-hero {
-  background: linear-gradient(135deg, #409eff 0%, #1677ff 100%);
+  background: linear-gradient(135deg, #1a3a6b 0%, #1677ff 100%);
   padding: 60px 40px;
   border-radius: 12px;
   text-align: center;
@@ -460,7 +460,7 @@ onMounted(() => {
 }
 
 .hot-item:hover {
-  color: #409eff;
+  color: #1a3a6b;
 }
 
 .hot-item .rank {
@@ -496,7 +496,7 @@ onMounted(() => {
 }
 
 .latest-item:hover {
-  color: #409eff;
+  color: #1a3a6b;
 }
 
 .card-container {

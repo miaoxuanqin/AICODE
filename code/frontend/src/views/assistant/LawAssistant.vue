@@ -574,7 +574,7 @@ onMounted(async () => {
 }
 
 .message.user .message-body {
-  background: #409eff;
+  background: #1a3a6b;
   color: #fff;
 }
 
@@ -692,7 +692,7 @@ onMounted(async () => {
 
 .scene-item:hover {
   background: #e4e7ed;
-  color: #409eff;
+  color: #1a3a6b;
 }
 
 .knowledge-list,

@@ -426,7 +426,7 @@ const handleManualSubmit = async () => {
 
 .knowledge-title {
   cursor: pointer;
-  color: #409eff;
+  color: #1a3a6b;
 }
 
 .knowledge-title:hover {

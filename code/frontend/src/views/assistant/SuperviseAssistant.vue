@@ -530,7 +530,7 @@ onMounted(async () => {
 }
 
 .message.user .message-body {
-  background: #409eff;
+  background: #1a3a6b;
   color: #fff;
 }
 
