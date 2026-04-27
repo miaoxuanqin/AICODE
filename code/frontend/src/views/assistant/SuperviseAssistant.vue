@@ -264,6 +264,12 @@ const initSession = async () => {
     }
   } catch (error) {
     console.error('初始化监管会话失败:', error)
+    try {
+      const data = await qaApi.createSession('【监管】新对话', 'supervise')
+      currentSessionId.value = data.id
+    } catch (e) {
+      console.error('创建监管会话失败:', e)
+    }
   }
 }
 
@@ -279,18 +285,17 @@ const loadSessionHistory = async () => {
         content: m.content,
         time: m.time
       }))
-    }
 
-    // 加载关联知识
-    const lastUserMsg = messages.value.filter(m => m.role === 'user').slice(-1)[0]
-    if (lastUserMsg) {
-      await loadRelatedKnowledge(lastUserMsg.content)
-    }
+      const lastUserMsg = messages.value.filter(m => m.role === 'user').slice(-1)[0]
+      if (lastUserMsg) {
+        await loadRelatedKnowledge(lastUserMsg.content).catch(() => {})
+      }
 
-    // 加载最近记录
-    await loadRecentRecords()
+      await loadRecentRecords().catch(() => {})
+    }
   } catch (error) {
     console.error('加载会话历史失败:', error)
+    messages.value = []
   }
 }
 

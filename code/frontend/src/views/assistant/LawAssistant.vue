@@ -413,61 +413,51 @@ const clearHistory = () => {
 
 const initSession = async () => {
   try {
-    console.log('=== initSession 开始 ===')
-    // 先获取已有的执法助手会话
     const sessionsData = await qaApi.getSessions()
-    console.log('所有会话:', sessionsData)
     const lawSessions = (sessionsData.items || []).filter(s => s.category === 'law_general')
-    console.log('执法助手会话:', lawSessions)
 
     if (lawSessions.length > 0) {
-      console.log('使用已有会话:', lawSessions[0].id)
-      // 使用最新的执法会话
       currentSessionId.value = lawSessions[0].id
       await loadSessionHistory()
     } else {
-      console.log('创建新会话')
-      // 创建新会话
       const data = await qaApi.createSession('【执法】新对话', 'law_general')
-      console.log('创建会话返回:', data)
       currentSessionId.value = data.id
     }
-    console.log('=== initSession 结束 ===')
   } catch (error) {
     console.error('初始化执法会话失败:', error)
+    try {
+      const data = await qaApi.createSession('【执法】新对话', 'law_general')
+      currentSessionId.value = data.id
+    } catch (e) {
+      console.error('创建执法会话失败:', e)
+    }
   }
 }
 
 const loadSessionHistory = async () => {
   if (!currentSessionId.value) {
-    console.log('loadSessionHistory: 无sessionId')
     return
   }
 
-  console.log('loadSessionHistory: 加载会话', currentSessionId.value)
   try {
     const data = await qaApi.getSession(currentSessionId.value)
-    console.log('会话详情:', data)
     if (data && data.messages) {
       messages.value = data.messages.map(m => ({
         role: m.role,
         content: m.content,
         time: m.time
       }))
-      console.log('消息列表:', messages.value)
-    }
 
-    // 加载关联知识（从最后一条用户消息获取关键词）
-    const lastUserMsg = messages.value.filter(m => m.role === 'user').slice(-1)[0]
-    if (lastUserMsg) {
-      console.log('加载关联知识，关键词:', lastUserMsg.content)
-      await loadRelatedKnowledge(lastUserMsg.content)
-    }
+      const lastUserMsg = messages.value.filter(m => m.role === 'user').slice(-1)[0]
+      if (lastUserMsg) {
+        await loadRelatedKnowledge(lastUserMsg.content).catch(() => {})
+      }
 
-    // 加载最近案例
-    await loadRecentCases()
+      await loadRecentCases().catch(() => {})
+    }
   } catch (error) {
     console.error('加载会话历史失败:', error)
+    messages.value = []
   }
 }
 

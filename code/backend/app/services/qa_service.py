@@ -119,7 +119,7 @@ class QAService:
                     "id": m.id,
                     "role": m.role,
                     "content": m.content,
-                    "time": m.created_at.strftime("%H:%M") if m.created_at else ""
+                    "time": m.created_at.strftime("%Y-%m-%d %H:%M") if m.created_at else ""
                 } for m in messages]
             }
         except Exception as e:
@@ -307,6 +307,7 @@ class QAService:
                 "id": item['id'],
                 "title": item['title'],
                 "summary": content[:200],
+                "type": item.get('category', ''),
                 "category": item.get('category', ''),
                 "source": item.get('source', ''),
                 "confidence": min(95, int(item.get('score', 0) * 10 + 60))
@@ -508,7 +509,7 @@ class QAService:
         try:
             message = self.llm_client.messages.create(
                 model=settings.anthropic_default_haiku_model,
-                max_tokens=1024,
+                max_tokens=2048,
                 messages=[{"role": "user", "content": prompt}]
             )
 

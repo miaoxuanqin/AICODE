@@ -16,6 +16,7 @@ class KnowledgeCard(BaseModel):
     id: str
     title: str
     summary: str
+    type: str = ""
     category: str = ""
     source: str = ""
     confidence: int = 0
