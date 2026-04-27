@@ -100,6 +100,8 @@
                         v-for="(step, stepIdx) in msg.reasoningChain"
                         :key="stepIdx"
                         class="reasoning-step"
+                        :class="{ 'is-expanded': expandedSteps.includes(stepIdx) }"
+                        @click="toggleStep(stepIdx)"
                       >
                         <div class="step-number">{{ stepIdx + 1 }}</div>
                         <div class="step-content">
@@ -115,6 +117,28 @@
                               {{ entity }}
                             </el-tag>
                           </div>
+                          <!-- 展开详情 -->
+                          <div v-if="expandedSteps.includes(stepIdx) && step.details" class="step-details">
+                            <div v-if="step.details.search_query" class="detail-item">
+                              <span class="detail-label">搜索词：</span>
+                              <span class="detail-value">{{ step.details.search_query }}</span>
+                            </div>
+                            <div v-if="step.details.knowledge_found?.length" class="detail-item">
+                              <span class="detail-label">找到的知识：</span>
+                              <div class="knowledge-list">
+                                <div
+                                  v-for="(title, idx) in step.details.knowledge_found"
+                                  :key="idx"
+                                  class="knowledge-item"
+                                >
+                                  {{ idx + 1 }}. {{ title }}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div class="step-expand-icon">
+                          <el-icon v-if="step.details"><ArrowRight :class="{ 'is-expanded': expandedSteps.includes(stepIdx) }" /></el-icon>
                         </div>
                         <div v-if="stepIdx < msg.reasoningChain.length - 1" class="step-arrow">
                           <el-icon><ArrowRight /></el-icon>
@@ -243,8 +267,8 @@
                     @mouseleave="unhighlightEdge"
                   />
                   <text
-                    :x="(nodes.find(n => n.id === edge.source)?.x + nodes.find(n => n.id === edge.target)?.x) / 2"
-                    :y="(nodes.find(n => n.id === edge.source)?.y + nodes.find(n => n.id === edge.target)?.y) / 2 - 8"
+                    :x="(graphData.nodes.find(n => n.id === edge.source)?.x + graphData.nodes.find(n => n.id === edge.target)?.x) / 2"
+                    :y="(graphData.nodes.find(n => n.id === edge.source)?.y + graphData.nodes.find(n => n.id === edge.target)?.y) / 2 - 8"
                     text-anchor="middle"
                     class="edge-label"
                     :fill="highlightedEdges.includes(edge.id) ? '#409eff' : '#909399'"
@@ -262,12 +286,12 @@
                   :transform="`translate(${node.x}, ${node.y})`"
                   class="node-group"
                   @click="selectNode(node)"
-                  @mouseenter="hoverNode(node)"
+                  @mouseenter="hoverNode(node.id)"
                   @mouseleave="unhoverNode"
                 >
                   <!-- 节点背景 -->
                   <circle
-                    :r="selectedNode?.id === node.id ? 40 : (hoveredNode?.id === node.id ? 38 : 35)"
+                    :r="selectedNode?.id === node.id ? 40 : (hoveredNodeId === node.id ? 38 : 35)"
                     :fill="getNodeColor(node.type)"
                     :stroke="selectedNode?.id === node.id || highlightedNodes.includes(node.id) ? '#409eff' : 'transparent'"
                     :stroke-width="3"
@@ -286,7 +310,7 @@
                   <text
                     y="50"
                     text-anchor="middle"
-                    :fill="selectedNode?.id === node.id || hoveredNode?.id === node.id ? '#303133' : '#606266'"
+                    :fill="selectedNode?.id === node.id || hoveredNodeId === node.id ? '#303133' : '#606266'"
                     font-size="12"
                     font-weight="500"
                   >
@@ -376,14 +400,16 @@ import {
   FullScreen, Refresh, Loading, Clock, Check, Close
 } from '@element-plus/icons-vue'
 import { marked } from 'marked'
+import { graphApi } from '@/api'
 
 const inputMessage = ref('')
 const isThinking = ref(false)
 const messages = ref([])
 const chatMessagesRef = ref(null)
 const showReasoning = ref(true)
+const expandedSteps = ref([])
 const selectedNode = ref(null)
-const hoveredNode = ref(null)
+const hoveredNodeId = ref(null)
 const highlightedNodes = ref([])
 const highlightedEdges = ref([])
 
@@ -400,10 +426,10 @@ const exampleQuestions = [
 ]
 
 const thinkingSteps = [
-  '解析问题实体',
-  '查询知识图谱',
-  '多跳推理关联',
-  '汇总答案'
+  '理解问题',
+  '检索知识',
+  '多跳推理',
+  '生成回答'
 ]
 const thinkingCurrent = ref(-1)
 
@@ -581,13 +607,13 @@ const selectNode = (node) => {
 }
 
 // 悬停节点
-const hoverNode = (node) => {
-  hoveredNode.value = node
+const hoverNode = (nodeId) => {
+  hoveredNodeId.value = nodeId
 }
 
 // 取消悬停
 const unhoverNode = () => {
-  hoveredNode.value = null
+  hoveredNodeId.value = null
 }
 
 // 高亮边
@@ -610,6 +636,16 @@ const highlightNode = (nodeId) => {
   const node = graphData.nodes.find(n => n.id === nodeId)
   if (node) {
     selectNode(node)
+  }
+}
+
+// 切换推理步骤展开
+const toggleStep = (stepIdx) => {
+  const idx = expandedSteps.value.indexOf(stepIdx)
+  if (idx > -1) {
+    expandedSteps.value.splice(idx, 1)
+  } else {
+    expandedSteps.value.push(stepIdx)
   }
 }
 
@@ -648,37 +684,52 @@ const handleSend = async () => {
     time: new Date().toLocaleTimeString()
   }
   messages.value.push(userMsg)
+  expandedSteps.value = []
   inputMessage.value = ''
   isThinking.value = true
   thinkingCurrent.value = 0
 
   scrollToBottom()
 
-  // 模拟思考过程
-  for (let i = 0; i < thinkingSteps.length; i++) {
-    thinkingCurrent.value = i
-    await new Promise(resolve => setTimeout(resolve, 600))
+  try {
+    const result = await graphApi.qa(userMsg.content)
+
+    // 更新图谱数据
+    if (result.graph_data) {
+      graphData.nodes = result.graph_data.nodes || []
+      graphData.edges = result.graph_data.edges || []
+    }
+    highlightedNodes.value = []
+    highlightedEdges.value = []
+
+    isThinking.value = false
+    thinkingCurrent.value = -1
+
+    const aiMsg = {
+      role: 'assistant',
+      content: result.answer,
+      reasoningChain: result.reasoning_chain || [],
+      citations: result.citations || [],
+      time: new Date().toLocaleTimeString()
+    }
+    messages.value.push(aiMsg)
+
+  } catch (error) {
+    console.error('图谱问答失败:', error)
+    isThinking.value = false
+    thinkingCurrent.value = -1
+    ElMessage.error('问答服务出错，请稍后重试')
+
+    // 保留用户消息，显示错误提示
+    const aiMsg = {
+      role: 'assistant',
+      content: '抱歉，服务暂时不可用，请稍后重试。',
+      reasoningChain: [],
+      citations: [],
+      time: new Date().toLocaleTimeString()
+    }
+    messages.value.push(aiMsg)
   }
-
-  // 模拟图谱加载
-  graphData.nodes = [...mockGraphData.nodes]
-  graphData.edges = [...mockGraphData.edges]
-  highlightedNodes.value = []
-  highlightedEdges.value = []
-
-  await new Promise(resolve => setTimeout(resolve, 400))
-
-  isThinking.value = false
-  thinkingCurrent.value = -1
-
-  const aiMsg = {
-    role: 'assistant',
-    content: mockAnswer,
-    reasoningChain: [...mockReasoningChain],
-    citations: [...mockCitations],
-    time: new Date().toLocaleTimeString()
-  }
-  messages.value.push(aiMsg)
 
   scrollToBottom()
 }
@@ -892,6 +943,71 @@ onMounted(() => {
   margin-top: 8px;
 }
 
+.step-details {
+  background: #fff;
+  border-radius: 4px;
+  padding: 12px;
+  margin-top: 12px;
+  font-size: 12px;
+  border: 1px solid #e4e7ed;
+}
+
+.detail-item {
+  margin-bottom: 8px;
+}
+
+.detail-item:last-child {
+  margin-bottom: 0;
+}
+
+.detail-label {
+  color: #909399;
+  font-weight: 500;
+}
+
+.detail-value {
+  color: #303133;
+}
+
+.knowledge-list {
+  margin-top: 6px;
+  padding-left: 12px;
+}
+
+.knowledge-item {
+  color: #606266;
+  line-height: 1.8;
+}
+
+.reasoning-step {
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.reasoning-step:hover {
+  background: #f5f7fa;
+}
+
+.reasoning-step.is-expanded {
+  background: #f0f9ff;
+}
+
+.step-expand-icon {
+  display: flex;
+  align-items: center;
+  color: #c0c4cc;
+}
+
+.step-expand-icon .el-icon {
+  transition: transform 0.3s;
+}
+
+.step-expand-icon .el-icon.is-expanded {
+  transform: rotate(90deg);
+}
+
 .step-arrow {
   color: #409eff;
   margin-top: 4px;
@@ -1013,11 +1129,6 @@ onMounted(() => {
 
 .node-group {
   cursor: pointer;
-  transition: transform 0.2s;
-}
-
-.node-group:hover {
-  transform: scale(1.1);
 }
 
 .node-circle {

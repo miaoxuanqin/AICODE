@@ -134,4 +134,14 @@ export const qaApi = {
   history: (limit) => request.get('/qa/history', { params: { limit } })
 }
 
+// ============ 图谱问答 API ============
+export const graphApi = {
+  // 图谱增强问答
+  qa: (question) => request.post('/graph/qa', { question }),
+  // 提取实体
+  extractEntities: (text) => request.get('/graph/entity/extract', { params: { q: text } }),
+  // 构建图谱
+  buildGraph: (entities) => request.post('/graph/graph/build', entities)
+}
+
 export default request

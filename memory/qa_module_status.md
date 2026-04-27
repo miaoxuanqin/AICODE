@@ -25,19 +25,22 @@ lastUpdated: 2026-04-27
 | 文件 | 说明 |
 |------|------|
 | `app/services/qa_service.py` | 问答服务（RAG架构，ES搜索+向量搜索+MiniMax LLM，session管理） |
+| `app/services/graph_service.py` | 图谱服务（Graph-RAG，实体识别，多跳推理） |
 | `app/schemas/qa.py` | Pydantic schemas (KnowledgeCard 包含 type+category 字段) |
 | `app/models/qa.py` | QARecord, QAHotQuestion, QAHistory, QASession, QASessionMessage 模型 |
 | `app/api/v1/qa.py` | 问答助手 API (session管理、chat、stats等) |
+| `app/api/v1/graph.py` | Graph API (推理详情 details 字段) |
 | `app/services/search_service.py` | ES搜索服务 + Qdrant向量搜索 |
 | `app/services/embedding_service.py` | Embedding服务 |
 
 ### 前端 (code/frontend/)
 | 文件 | 说明 |
 |------|------|
-| `src/api/index.js` | qaApi，timeout=120000ms |
+| `src/api/index.js` | qaApi + graphApi，timeout=120000ms |
 | `src/views/qa/QAChat.vue` | 问答助手页面 |
 | `src/views/assistant/LawAssistant.vue` | 执法智能助手（政务蓝样式） |
 | `src/views/assistant/SuperviseAssistant.vue` | 工程监管助手（政务蓝样式） |
+| `src/views/graph/GraphQAChat.vue` | 图谱增强问答页面（推理详情展开功能） |
 
 ### 样式 (code/frontend/src/styles/)
 | 文件 | 说明 |
@@ -130,6 +133,10 @@ qa_session_message      -- 会话消息表
 | 2026-04-27 | API 超时 30s | 改为 120s |
 | 2026-04-27 | LLM 回答截断 | max_tokens 2048 |
 | 2026-04-27 | 控制台日志冗余 | 移除调试 console.log |
+| 2026-04-27 | 图谱节点悬停乱跳 | `hoveredNode` 改为 `hoveredNodeId` |
+| 2026-04-27 | 图谱节点悬停乱跳 | CSS `scale(1.1)` 与 SVG `translate()` 冲突，移除 |
+| 2026-04-27 | 推理详情无法查看 | Pydantic `ReasoningStep` 添加 `details` 字段 |
+| 2026-04-27 | 图谱问答 404 | Python `__pycache__` 缓存，清除后重启 |
 
 ## 待完成
 1. 评价功能前端联动
