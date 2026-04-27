@@ -12,56 +12,66 @@ lastUpdated: 2026-04-27
 ## 开发进度
 - 需求分析：✅ 已完成
 - 详细设计：✅ 已完成
-- 后端开发：✅ 已完成（知识库 + 问答助手）
-- 前端开发：✅ 详情页、搜索门户、管理页面均已完成
+- 后端开发：✅ 已完成（知识库 + 问答助手 + 图谱增强）
+- 前端开发：✅ 详情页、搜索门户、管理页面、图谱增强均已完成
 - 联调测试：✅ 主要功能已完成
 
-## 新增模块：图谱增强问答（2026-04-27）
+---
 
-| 功能 | 状态 | 说明 |
+## 一、已完成模块
+
+| 模块 | 状态 | 说明 |
 |------|------|------|
-| 高保真原型 | ✅ 完成 | GraphQAChat.vue |
-| 图谱可视化 | ✅ 完成 | SVG 交互式图谱 |
-| 推理路径展示 | ✅ 完成 | 可折叠推理步骤 |
-| 节点交互 | ✅ 完成 | 点击选中、高亮关联 |
-| 路由注册 | ✅ 完成 | /assistant/graph |
-| Neo4j 部署 | ✅ 完成 | Docker 部署在 WSL |
-| 后端 API | 🔶 待开发 | Graph API |
-| Neo4j 数据模型 | 🔶 待开发 | 节点和关系类型定义 |
+| 知识搜索门户 | ✅ | SearchPortal.vue |
+| 知识库管理 | ✅ | KnowledgeManage.vue |
+| 执法智能助手 | ✅ | LawAssistant.vue |
+| 问答助手 | ✅ | QAChat.vue |
+| 用户权限管理 | ✅ | UserManage.vue |
+| 工程监管助手 | ✅ | SuperviseAssistant.vue |
+| 图谱增强问答 | ✅ | GraphQAChat.vue（2026-04-27 完成） |
 
-## 已完成文件
+---
+
+## 二、已完成文件
 
 ### 后端 (code/backend/)
+
 | 文件 | 说明 |
 |------|------|
 | `app/models/knowledge.py` | Knowledge, UserFavorite, KnowledgeComment 模型 |
 | `app/models/qa.py` | QARecord, QAHotQuestion, QAHistory, QASession, QASessionMessage 模型 |
 | `app/services/parser_service.py` | PDF/Word 解析服务 |
 | `app/services/minio_service.py` | MinIO 文件存储 |
-| `app/services/search_service.py` | ES 搜索服务 + Qdrant 向量搜索（**支持分片**） |
+| `app/services/search_service.py` | ES 搜索服务 + Qdrant 向量搜索（支持分片） |
 | `app/services/embedding_service.py` | Embedding 服务（local WSL / minimax 切换） |
-| `app/services/qa_service.py` | 问答服务（RAG 架构，**所有助手统一使用向量搜索**） |
+| `app/services/qa_service.py` | 问答服务（RAG 架构，所有助手统一使用向量搜索） |
+| `app/services/graph_service.py` | **图谱服务**（2026-04-27 新增） |
 | `app/schemas/knowledge.py` | Pydantic schemas |
 | `app/schemas/qa.py` | QA Pydantic schemas |
-| `app/api/v1/knowledge.py` | 知识管理 API（支持 keyword/vector/hybrid 三种搜索模式） |
+| `app/api/v1/knowledge.py` | 知识管理 API |
 | `app/api/v1/qa.py` | 问答助手 API |
+| `app/api/v1/graph.py` | **图谱增强问答 API**（2026-04-27 新增） |
 | `requirements.txt` | python-docx, pdfplumber, elasticsearch, qdrant-client, minio, anthropic |
 
 ### 前端 (code/frontend/)
+
 | 文件 | 说明 |
 |------|------|
-| `src/api/index.js` | knowledgeApi + qaApi |
+| `src/api/index.js` | knowledgeApi + qaApi + **graphApi** |
 | `src/views/knowledge/KnowledgeManage.vue` | 知识管理页面 |
 | `src/views/knowledge/SearchPortal.vue` | 搜索门户（支持 keyword/vector/hybrid 切换） |
 | `src/views/knowledge/KnowledgeDetail.vue` | 知识详情页 |
-| `src/views/qa/QAChat.vue` | 问答助手页面（**已优化加载性能**） |
-| `src/views/assistant/LawAssistant.vue` | 执法智能助手（**已优化**） |
+| `src/views/qa/QAChat.vue` | 问答助手页面 |
+| `src/views/assistant/LawAssistant.vue` | 执法智能助手 |
 | `src/views/assistant/SuperviseAssistant.vue` | 工程监管助手 |
+| `src/views/graph/GraphQAChat.vue` | **图谱增强问答页面** |
 | `src/components/layout/MainLayout.vue` | 已添加知识管理菜单 |
 | `src/router/index.js` | 路由守卫 |
-| `src/views/graph/GraphQAChat.vue` | **图谱增强问答页面** |
 
-## 数据库表
+---
+
+## 三、数据库表
+
 ```sql
 knowledge              -- 知识表
 user_favorites        -- 收藏表
@@ -73,93 +83,86 @@ qa_session           -- 会话表（含 category 字段）
 qa_session_message    -- 会话消息表
 ```
 
-## 数据存储架构
-- **MySQL**: 存储元数据 (title, summary, category, source, tags, file_path, view_count, favorite_count)
-- **Elasticsearch**: 存储完整内容 (content)，支持全文搜索
-- **Qdrant**: 存储向量 (768维 text2vec-base-chinese)，**支持分片**
-- **Redis**: 存储热搜词计数
-- **MinIO**: 存储原始上传文件
+---
 
-## 搜索实现（2026-04-27 更新）
+## 四、数据存储架构
 
-### 分片向量化（2026-04-27 新增）
+| 存储 | 用途 | 状态 |
+|------|------|------|
+| MySQL | 元数据 (title, summary, category, source, tags, file_path) | ✅ |
+| Elasticsearch | 完整内容 (content)，支持全文搜索 | ✅ |
+| Qdrant | 向量 (768维 text2vec-base-chinese)，支持分片 | ✅ |
+| Redis | 热搜词计数 | ✅ |
+| MinIO | 原始上传文件 | ✅ |
 
-| 参数 | 值 | 说明 |
-|------|-----|------|
-| chunk_size | 500 字符 | 每个 chunk 大小 |
-| chunk_overlap | 50 字符 | 相邻 chunk 重叠 |
-| 每知识向量数 | 文档长度 / 450 | 平均约 3-10 个 |
+---
 
-**分片后数据结构：**
-```python
-# 每个 chunk 独立存储到 Qdrant
-PointStruct(
-    id=str(uuid.uuid4()),  # 独立 UUID
-    vector=vector,
-    payload={
-        "title": "知识标题",
-        "content": "当前chunk内容",
-        "user_id": "1",  # 字符串类型
-        "chunk_index": 0,
-        "total_chunks": 5,
-        "knowledge_id": "原始knowledge_id"
-    }
-)
-```
+## 五、搜索架构
 
-### 三个助手统一使用向量搜索
+### 向量分片（2026-04-27）
+
+| 参数 | 值 |
+|------|-----|
+| chunk_size | 500 字符 |
+| chunk_overlap | 50 字符 |
+| 向量维度 | 768 (text2vec-base-chinese) |
+
+### 助手分类
 
 | 助手 | Category | 搜索方式 | search_size |
 |------|----------|---------|-------------|
-| 问答助手 | qa | **向量搜索优先** | 5 |
-| 执法智能助手 | law_general | **向量搜索优先** | 5 |
-| 工程监管助手 | supervise | **向量搜索优先** | 8 |
+| 问答助手 | qa | 向量搜索优先 | 5 |
+| 执法智能助手 | law_general | 向量搜索优先 | 5 |
+| 工程监管助手 | supervise | 向量搜索优先 | 8 |
 
-### 搜索流程
+### 图谱增强问答（2026-04-27 新增）
 
-```
-所有助手 → 向量搜索 → (失败) → 关键词搜索
-                ↓
-        Embedding → Qdrant → 多chunk匹配 → 去重 → 返回知识ID → ES获取详情
-```
+| 组件 | 实现 |
+|------|------|
+| 实体识别 | 规则匹配 + LLM 辅助 |
+| 知识检索 | 向量搜索 + 关键词搜索 |
+| 图谱构建 | 节点/边生成 + 布局计算 |
+| 回答生成 | MiniMax LLM |
+| 前端对接 | graphApi.qa() |
 
-### Prompt 优化（2026-04-27）
+---
 
-修改了 `_build_prompt` 方法，避免 LLM 在回答中显示"【知识1】"、"【知识2】"等编号：
+## 六、2026-04-27 完成内容
 
-1. **知识内容格式**：从 `【知识 1】标题...内容` 改为 `[1] 标题\n分类：xxx\n内容`
-2. **系统提示**：三个助手的 system_prompt 都添加了明确指令：
-   - "直接整合信息，答案要专业、准确、流畅"
-   - "不要在回答中提及【知识1】、【知识2】、参考信息、知识内容等编号或来源"
+### 1. 图谱增强问答（Graph-RAG）✅
 
-### LLM 调用修复（2026-04-27）
+**后端实现**：
+- `graph_service.py` - GraphService 类
+  - `extract_entities()` - 实体识别
+  - `build_graph()` - 图谱构建
+  - `reason()` - 图谱增强推理问答
+- `graph.py` - Graph API
+  - `POST /api/v1/graph/qa` - 核心问答接口
+  - `GET /api/v1/graph/entity/extract` - 实体提取
+  - `POST /api/v1/graph/graph/build` - 图谱构建
 
-修复了 `_call_llm` 方法，原问题：MiniMax-M2.7 返回的 `ThinkingBlock` 导致无法正确获取 `TextBlock`
+**前端对接**：
+- `index.js` - 添加 graphApi
+- `GraphQAChat.vue` - 对接后端 API
 
-## 会话管理
+**路由注册**：
+- `__init__.py` - 引入 graph 路由
 
-### Category 隔离
+### 2. 向量分片功能开发
+- 修改 `index_vector` 方法，实现文档全文分片向量化
+- 修复 Qdrant point ID 格式问题
 
-| category | 用途 | 页面 | 说明 |
-|----------|------|------|------|
-| `qa` | 问答助手会话 | QAChat.vue | 只显示 category='qa' 的会话 |
-| `law_general` | 执法助手会话 | LawAssistant.vue | 自动过滤掉 |
-| `supervise` | 工程监管助手会话 | SuperviseAssistant.vue | 自动过滤掉 |
+### 3. 消息时间显示修复
+- 后端返回完整日期时间格式
+- 前端直接显示
 
-### 前端会话过滤逻辑（2026-04-27 修复）
+### 4. 会话删除功能
+- LawAssistant 和 SuperviseAssistant 的 `clearHistory` 调用 `qaApi.clearMessages()`
+- QAChat.vue 添加 `deleteSession` 函数
 
-```javascript
-// 问答助手只显示 qa 类别的会话
-sessions.value = (data.items || []).filter(s => s.category === 'qa')
+---
 
-// 执法助手只显示 law_general
-const lawSessions = sessionsData.items.filter(s => s.category === 'law_general')
-
-// 工程监管助手只显示 supervise
-const superviseSessions = sessionsData.items.filter(s => s.category === 'supervise')
-```
-
-## 数据状态
+## 七、数据状态
 
 | 存储 | 数量 | 状态 |
 |------|------|------|
@@ -167,50 +170,12 @@ const superviseSessions = sessionsData.items.filter(s => s.category === 'supervi
 | ES 知识 | 33条 | ✅ 已同步 |
 | Qdrant chunks | ~150条 | ✅ 分片索引已重建 |
 
-## 2026-04-27 完成内容
+---
 
-### 1. 向量分片功能开发
-- 修改 `index_vector` 方法，实现文档全文分片向量化
-- 每个 chunk 500 字符，相邻重叠 50 字符
-- 修复 Qdrant point ID 格式问题（改用独立 UUID）
-- 修复 user_id 类型不匹配问题（统一字符串）
+## 八、待完成
 
-### 2. 消息时间显示修复
-- 后端返回 `YYYY-MM-DD HH:mm:ss` 格式的完整日期时间
-- 前端直接显示 `msg.time`（后端返回的格式）
-
-### 3. LLM 响应修复
-- 问题：`"抱歉，回答生成失败"` - MiniMax 返回 ThinkingBlock 导致 TextBlock 检测失败
-- 解决：正确处理 ThinkingBlock，提取 TextBlock 内容
-
-### 4. 会话删除功能（2026-04-27）
-- LawAssistant.vue 和 SuperviseAssistant.vue 的 `clearHistory` 现在会调用 `qaApi.clearMessages()` 清空会话
-- QAChat.vue 添加了 `deleteSession` 函数支持删除会话
-
-### 5. Prompt 优化
-- 知识内容格式从 `【知识1】标题...` 改为 `[1] 标题\n分类：xxx\n内容`
-- 系统提示明确要求不要在回答中提及知识编号
-
-### 6. 前端页面性能优化（2026-04-27 新增）
-- **QAChat.vue**：
-  - 会话懒加载（不在 onMounted 时自动加载）
-  - 统计数据缓存（5分钟）
-  - 热门问题缓存（5分钟）
-  - Markdown 渲染优化
-- **LawAssistant.vue**：
-  - 移除多余 console.log 语句
-
-### 7. 批量重建向量索引
-- 删除旧 collection，重新创建
-- 执行 `python -m app.scripts.rebuild_vector_index`
-- 结果：33条成功，10条跳过
-
-## 待完成
 1. 评价功能前端联动
 2. 知识库批量导入
 3. 性能优化（缓存、预热）
-4. 向量搜索效果优化（embedding 模型升级）
-5. 前端详情页加载优化（大数据量渲染卡顿）
-6. **图谱增强问答后端 API 开发**
-7. **图谱增强问答 Neo4j 数据模型**
-8. **图谱数据填充与前后端对接**
+4. **Neo4j 集成**（当前使用内存图谱）
+5. 实体关系自动抽取优化
