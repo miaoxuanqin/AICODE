@@ -1,3 +1,4 @@
+import uuid
 from typing import List, Optional, Dict, Any
 from elasticsearch import Elasticsearch
 from qdrant_client import QdrantClient
@@ -163,27 +164,40 @@ class SearchService:
 
     def search_vector(self, query_vector: List[float], user_id: str,
                      category: Optional[str] = None, limit: int = 5) -> List[str]:
-        """向量搜索（Qdrant），返回知识ID列表"""
+        """向量搜索（Qdrant），返回去重后的知识ID列表"""
         collection_name = "knowledge"
 
         try:
             # 构建过滤条件
             from qdrant_client.models import Filter, FieldCondition, MatchValue
-            # Qdrant 中 user_id 存储为字符串，直接使用
             must_conditions = [FieldCondition(key="user_id", match=MatchValue(value=user_id))]
             if category:
                 must_conditions.append(FieldCondition(key="category", match=MatchValue(value=category)))
 
             search_filter = Filter(must=must_conditions)
 
+            # 扩大搜索范围，因为每个知识现在有多个 chunk
+            search_limit = limit * 3
+
             results = self.qdrant.query_points(
                 collection_name=collection_name,
                 query=query_vector,
                 query_filter=search_filter,
-                limit=limit
+                limit=search_limit
             )
 
-            return [hit.id for hit in results.points]
+            # 按 knowledge_id 去重，保留相关性最高的 chunk
+            knowledge_ids = []
+            seen = set()
+            for hit in results.points:
+                kid = hit.payload.get("knowledge_id") or hit.id
+                if kid not in seen:
+                    seen.add(kid)
+                    knowledge_ids.append(kid)
+                    if len(knowledge_ids) >= limit:
+                        break
+
+            return knowledge_ids
 
         except Exception as e:
             print(f"向量搜索失败: {e}")
@@ -191,11 +205,13 @@ class SearchService:
 
     def index_vector(self, knowledge_id: str, title: str, content: str,
                      category: str, user_id: str):
-        """将知识向量存储到 Qdrant"""
+        """将知识向量存储到 Qdrant（支持分片）"""
         from app.services.embedding_service import embedding_service
 
         collection_name = "knowledge"
         vector_size = 768  # text2vec-base-chinese 向量维度
+        chunk_size = 500   # 每个 chunk 的字符数
+        chunk_overlap = 50 # chunk 重叠字符数，保持上下文连贯
 
         try:
             # 确保 collection 存在
@@ -206,26 +222,90 @@ class SearchService:
                     vectors_config=VectorParams(size=vector_size, distance=Distance.COSINE)
                 )
 
-            # 生成向量
-            text = f"{title} {content[:1000]}"  # 截取前1000字
-            vector = embedding_service.encode_single(text)
+            # 文本分片
+            chunks = self._split_into_chunks(content, chunk_size, chunk_overlap)
 
-            # 存储向量
-            point = PointStruct(
-                id=knowledge_id,
-                vector=vector,
-                payload={
-                    "title": title,
-                    "content": content[:500],
-                    "category": category,
-                    "user_id": user_id
-                }
-            )
+            if not chunks:
+                # 内容为空，只用标题生成一个向量
+                text = title
+                vector = embedding_service.encode_single(text)
+                point = PointStruct(
+                    id=knowledge_id,
+                    vector=vector,
+                    payload={
+                        "title": title,
+                        "content": "",
+                        "category": category,
+                        "user_id": str(user_id),  # 统一转成字符串
+                        "chunk_index": 0,
+                        "total_chunks": 1,
+                        "knowledge_id": knowledge_id
+                    }
+                )
+                self.qdrant.upsert(collection_name=collection_name, points=[point])
+                return
 
-            self.qdrant.upsert(collection_name=collection_name, points=[point])
+            # 批量生成向量
+            texts_with_index = []
+            for i, chunk in enumerate(chunks):
+                # 每个 chunk 带上标题和位置信息，提升检索相关性
+                texts_with_index.append(f"{title} 第{i+1}段: {chunk}")
+
+            # 批量向量化
+            vectors = embedding_service.embed_batch(texts_with_index)
+
+            # 构建 points
+            points = []
+            for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
+                # 生成唯一 UUID 作为 point ID（Qdrant 只接受 UUID 或 unsigned integer）
+                chunk_id = str(uuid.uuid4())
+                point = PointStruct(
+                    id=chunk_id,
+                    vector=vector,
+                    payload={
+                        "title": title,
+                        "content": chunk,
+                        "category": category,
+                        "user_id": str(user_id),  # 统一转成字符串
+                        "chunk_index": i,
+                        "total_chunks": len(chunks),
+                        "knowledge_id": knowledge_id
+                    }
+                )
+                points.append(point)
+
+            # 批量存储
+            self.qdrant.upsert(collection_name=collection_name, points=points)
 
         except Exception as e:
             print(f"向量索引失败: {e}")
+
+    def _split_into_chunks(self, text: str, chunk_size: int, overlap: int) -> List[str]:
+        """将文本分割成重叠的 chunks"""
+        if not text:
+            return []
+
+        chunks = []
+        start = 0
+        text_len = len(text)
+
+        while start < text_len:
+            end = start + chunk_size
+            chunk = text[start:end]
+
+            # 去除换行符过多的碎片，保持阅读连贯性
+            chunk = '\n'.join([line.strip() for line in chunk.split('\n') if line.strip()])
+
+            if chunk:  # 只添加非空 chunk
+                chunks.append(chunk)
+
+            start += chunk_size - overlap  # 移动窗口，减去重叠部分
+
+            # 防止无限循环
+            if overlap >= chunk_size:
+                break
+
+        return chunks
 
     def get_hot_knowledge(self, user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """获取热门知识"""

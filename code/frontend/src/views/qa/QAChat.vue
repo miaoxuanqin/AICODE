@@ -25,12 +25,17 @@
 
           <!-- 对话区域 -->
           <div class="chat-messages" ref="chatMessagesRef">
-            <div v-if="!messages.length && !isThinking" class="empty-state">
+            <div v-if="!messages.length && !isThinking && !isLoadingSession" class="empty-state">
               <el-icon class="empty-icon"><ChatDotRound /></el-icon>
               <p>请输入您的问题，我将尽力为您解答</p>
             </div>
 
-            <div v-for="(msg, index) in sortedMessages" :key="msg.id || index" class="chat-message">
+            <div v-if="isLoadingSession" class="empty-state">
+              <el-icon class="is-loading"><Loading /></el-icon>
+              <p>加载会话记录...</p>
+            </div>
+
+            <div v-for="(msg, index) in messages" :key="msg.id || index" class="chat-message">
               <div :class="['message', msg.role]">
                 <div class="message-avatar">
                   <el-avatar :size="36" :icon="msg.role === 'user' ? 'User' : 'ChatDotRound'" />
@@ -165,6 +170,15 @@
                 >
                   <el-icon><Delete /></el-icon>
                 </el-button>
+                <el-button
+                  size="small"
+                  type="danger"
+                  link
+                  @click.stop="deleteSession(session.id)"
+                  title="删除会话"
+                >
+                  <el-icon><CircleClose /></el-icon>
+                </el-button>
               </div>
             </div>
             <div v-if="!sessions.length" class="no-sessions">
@@ -218,10 +232,10 @@
 </template>
 
 <script setup>
-import { ref, nextTick, onMounted, computed } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  ChatDotRound, Promotion, Star, User, ChatLineSquare, Check, Close, Loading, Plus, Delete
+  ChatDotRound, Promotion, Star, User, ChatLineSquare, Check, Close, Loading, Plus, Delete, CircleClose
 } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import { qaApi } from '@/api'
@@ -244,6 +258,7 @@ let currentRequestId = 0
 // 会话相关
 const sessions = ref([])
 const currentSessionId = ref(null)
+const isLoadingSession = ref(false)
 
 const quickQuestions = [
   '建设工程竣工验收条件',
@@ -257,19 +272,18 @@ const stats = ref({
   todayCount: 0,
   satisfaction: 0
 })
+const statsCacheTime = ref(0)
+const STATS_CACHE_DURATION = 5 * 60 * 1000 // 5分钟缓存
 
 const hotQuestions = ref([])
+const hotCacheTime = ref(0)
+const HOT_CACHE_DURATION = 5 * 60 * 1000 // 5分钟缓存
 
-// 确保消息按时间顺序显示
-const sortedMessages = computed(() => {
-  return [...messages.value].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))
-})
-
-// 渲染 Markdown
+// 渲染 Markdown（优化：使用 nextTick 避免阻塞）
 const renderMarkdown = (content) => {
   if (!content) return ''
   try {
-    return marked(content)
+    return marked.parse(content)
   } catch (e) {
     console.error('Markdown render error:', e)
     return content
@@ -278,6 +292,7 @@ const renderMarkdown = (content) => {
 
 // 缓存 user_id，避免重复查询
 let cachedUserId = null
+let renderQueue = null
 
 const ensureUserId = async () => {
   if (cachedUserId) return cachedUserId
@@ -302,8 +317,8 @@ const ensureUserId = async () => {
 const loadSessions = async () => {
   try {
     const data = await qaApi.getSessions()
-    // 过滤掉执法助手创建的会话（category=law_general）
-    sessions.value = (data.items || []).filter(s => s.category !== 'law_general')
+    // 只显示问答助手的会话（category=qa），过滤掉执法助手和工程监管助手创建的会话
+    sessions.value = (data.items || []).filter(s => s.category === 'qa')
   } catch (error) {
     console.error('加载会话列表失败:', error)
   }
@@ -326,6 +341,7 @@ const switchSession = async (sessionId) => {
   ++currentRequestId
   currentSessionId.value = sessionId
   messages.value = []
+  isLoadingSession.value = true
 
   try {
     const data = await qaApi.getSession(sessionId)
@@ -343,6 +359,8 @@ const switchSession = async (sessionId) => {
     }
   } catch (error) {
     console.error('加载会话详情失败:', error)
+  } finally {
+    isLoadingSession.value = false
   }
 
   scrollToBottom()
@@ -377,6 +395,41 @@ const clearSessionMessages = async (sessionId) => {
   }
 }
 
+const deleteSession = async (sessionId) => {
+  try {
+    await ElMessageBox.confirm('确定要删除该会话吗？删除后无法恢复。', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+
+    await qaApi.deleteSession(sessionId)
+
+    // 从列表中移除
+    const index = sessions.value.findIndex(s => s.id === sessionId)
+    if (index !== -1) {
+      sessions.value.splice(index, 1)
+    }
+
+    // 如果删除的是当前会话，切换到其他会话或清空
+    if (sessionId === currentSessionId.value) {
+      if (sessions.value.length > 0) {
+        switchSession(sessions.value[0].id)
+      } else {
+        messages.value = []
+        currentSessionId.value = null
+      }
+    }
+
+    ElMessage.success('会话已删除')
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除会话失败:', error)
+      ElMessage.error('删除会话失败')
+    }
+  }
+}
+
 const formatTime = (timeStr) => {
   if (!timeStr) return ''
   const date = new Date(timeStr)
@@ -388,6 +441,18 @@ const formatTime = (timeStr) => {
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}小时前`
   if (diff < 604800000) return `${Math.floor(diff / 86400000)}天前`
   return date.toLocaleDateString()
+}
+
+// 格式化时间戳为 日期+时间
+const formatDateTime = (timestamp) => {
+  if (!timestamp) return ''
+  const date = new Date(timestamp)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  const seconds = String(date.getSeconds()).padStart(2, '0')
+  return `${month}-${day} ${hours}:${minutes}:${seconds}`
 }
 
 // ============ 问答 ============
@@ -413,7 +478,7 @@ const handleSend = async () => {
   const userMsg = {
     role: 'user',
     content: inputMessage.value,
-    time: new Date().toLocaleTimeString(),
+    time: new Date().toLocaleString(),
     id: `user-${Date.now()}`,
     timestamp: Date.now()
   }
@@ -441,7 +506,7 @@ const handleSend = async () => {
       cards: result.cards || [],
       relatedQuestions: result.related_questions || [],
       likes: 0,
-      time: new Date().toLocaleTimeString(),
+      time: new Date().toLocaleString(),
       timestamp: Date.now()
     }
     messages.value.push(aiMsg)
@@ -461,6 +526,9 @@ const handleSend = async () => {
         session.title = result.question?.slice(0, 20) + (result.question?.length > 20 ? '...' : '')
       }
     }
+
+    // 更新统计（强制刷新，因为刚问答过）
+    loadStats(true)
   } catch (error) {
     if (thisRequestId === currentRequestId) {
       ElMessage.error('问答服务出错，请稍后重试')
@@ -512,7 +580,11 @@ const viewCard = (card) => {
 
 // ============ 数据加载 ============
 
-const loadStats = async () => {
+const loadStats = async (force = false) => {
+  // 缓存检查，5分钟内不重复请求
+  if (!force && Date.now() - statsCacheTime.value < STATS_CACHE_DURATION && stats.value.answerCount > 0) {
+    return
+  }
   try {
     const data = await qaApi.stats()
     stats.value = {
@@ -520,15 +592,21 @@ const loadStats = async () => {
       todayCount: data.today_count || 0,
       satisfaction: data.satisfaction || 0
     }
+    statsCacheTime.value = Date.now()
   } catch (error) {
     console.error('加载统计失败:', error)
   }
 }
 
-const loadHotQuestions = async () => {
+const loadHotQuestions = async (force = false) => {
+  // 缓存检查，5分钟内不重复请求
+  if (!force && Date.now() - hotCacheTime.value < HOT_CACHE_DURATION && hotQuestions.value.length > 0) {
+    return
+  }
   try {
     const data = await qaApi.hotQuestions(5)
     hotQuestions.value = data.items || []
+    hotCacheTime.value = Date.now()
   } catch (error) {
     console.error('加载热门问题失败:', error)
   }
@@ -537,17 +615,17 @@ const loadHotQuestions = async () => {
 onMounted(async () => {
   await ensureUserId()
 
-  // 并行加载数据
+  // 只加载会话列表，不自动加载消息（懒加载）
   await Promise.all([
     loadSessions(),
     loadStats(),
     loadHotQuestions()
   ])
 
-  // 如果有会话，加载最新的
-  if (sessions.value.length > 0) {
-    switchSession(sessions.value[0].id)
-  }
+  // 不再自动加载第一条会话的消息，让用户自己点击
+  // if (sessions.value.length > 0) {
+  //   switchSession(sessions.value[0].id)
+  // }
 })
 </script>
 

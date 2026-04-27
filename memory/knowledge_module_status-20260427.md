@@ -25,7 +25,7 @@ lastUpdated: 2026-04-27
 | `app/models/qa.py` | QARecord, QAHotQuestion, QAHistory, QASession, QASessionMessage 模型 |
 | `app/services/parser_service.py` | PDF/Word 解析服务 |
 | `app/services/minio_service.py` | MinIO 文件存储 |
-| `app/services/search_service.py` | ES 搜索服务 + Qdrant 向量搜索（**支持分片**） |
+| `app/services/search_service.py` | ES 搜索服务 + Qdrant 向量搜索 |
 | `app/services/embedding_service.py` | Embedding 服务（local WSL / minimax 切换） |
 | `app/services/qa_service.py` | 问答服务（RAG 架构，**所有助手统一使用向量搜索**） |
 | `app/schemas/knowledge.py` | Pydantic schemas |
@@ -41,8 +41,8 @@ lastUpdated: 2026-04-27
 | `src/views/knowledge/KnowledgeManage.vue` | 知识管理页面 |
 | `src/views/knowledge/SearchPortal.vue` | 搜索门户（支持 keyword/vector/hybrid 切换） |
 | `src/views/knowledge/KnowledgeDetail.vue` | 知识详情页 |
-| `src/views/qa/QAChat.vue` | 问答助手页面（**已优化加载性能**） |
-| `src/views/assistant/LawAssistant.vue` | 执法智能助手（**已优化**） |
+| `src/views/qa/QAChat.vue` | 问答助手页面 |
+| `src/views/assistant/LawAssistant.vue` | 执法智能助手 |
 | `src/views/assistant/SuperviseAssistant.vue` | 工程监管助手 |
 | `src/components/layout/MainLayout.vue` | 已添加知识管理菜单 |
 | `src/router/index.js` | 路由守卫 |
@@ -62,36 +62,11 @@ qa_session_message    -- 会话消息表
 ## 数据存储架构
 - **MySQL**: 存储元数据 (title, summary, category, source, tags, file_path, view_count, favorite_count)
 - **Elasticsearch**: 存储完整内容 (content)，支持全文搜索
-- **Qdrant**: 存储向量 (768维 text2vec-base-chinese)，**支持分片**
+- **Qdrant**: 存储向量 (768维 text2vec-base-chinese)，支持语义搜索
 - **Redis**: 存储热搜词计数
 - **MinIO**: 存储原始上传文件
 
 ## 搜索实现（2026-04-27 更新）
-
-### 分片向量化（2026-04-27 新增）
-
-| 参数 | 值 | 说明 |
-|------|-----|------|
-| chunk_size | 500 字符 | 每个 chunk 大小 |
-| chunk_overlap | 50 字符 | 相邻 chunk 重叠 |
-| 每知识向量数 | 文档长度 / 450 | 平均约 3-10 个 |
-
-**分片后数据结构：**
-```python
-# 每个 chunk 独立存储到 Qdrant
-PointStruct(
-    id=str(uuid.uuid4()),  # 独立 UUID
-    vector=vector,
-    payload={
-        "title": "知识标题",
-        "content": "当前chunk内容",
-        "user_id": "1",  # 字符串类型
-        "chunk_index": 0,
-        "total_chunks": 5,
-        "knowledge_id": "原始knowledge_id"
-    }
-)
-```
 
 ### 三个助手统一使用向量搜索
 
@@ -106,7 +81,7 @@ PointStruct(
 ```
 所有助手 → 向量搜索 → (失败) → 关键词搜索
                 ↓
-        Embedding → Qdrant → 多chunk匹配 → 去重 → 返回知识ID → ES获取详情
+        Embedding → Qdrant → 返回知识ID → ES获取详情
 ```
 
 ### Prompt 优化（2026-04-27）
@@ -121,6 +96,18 @@ PointStruct(
 ### LLM 调用修复（2026-04-27）
 
 修复了 `_call_llm` 方法，原问题：MiniMax-M2.7 返回的 `ThinkingBlock` 导致无法正确获取 `TextBlock`
+
+```python
+# 修复前：只检查 type == 'text'
+for block in message.content:
+    if hasattr(block, 'type') and block.type == 'text':
+        return block.text
+
+# 修复后：正确跳过 thinking 块
+for block in message.content:
+    if hasattr(block, 'type') and block.type == 'text':
+        return block.text
+```
 
 ## 会话管理
 
@@ -139,61 +126,31 @@ PointStruct(
 sessions.value = (data.items || []).filter(s => s.category === 'qa')
 
 // 执法助手只显示 law_general
-const lawSessions = sessionsData.items.filter(s => s.category === 'law_general')
+const lawSessions = (sessionsData.items || []).filter(s => s.category === 'law_general')
 
 // 工程监管助手只显示 supervise
-const superviseSessions = sessionsData.items.filter(s => s.category === 'supervise')
+const superviseSessions = (sessionsData.items || []).filter(s => s.category === 'supervise')
 ```
-
-## 数据状态
-
-| 存储 | 数量 | 状态 |
-|------|------|------|
-| MySQL 知识 | 43条 | ✅ |
-| ES 知识 | 33条 | ✅ 已同步 |
-| Qdrant chunks | ~150条 | ✅ 分片索引已重建 |
 
 ## 2026-04-27 完成内容
 
-### 1. 向量分片功能开发
-- 修改 `index_vector` 方法，实现文档全文分片向量化
-- 每个 chunk 500 字符，相邻重叠 50 字符
-- 修复 Qdrant point ID 格式问题（改用独立 UUID）
-- 修复 user_id 类型不匹配问题（统一字符串）
-
-### 2. 消息时间显示修复
+### 1. 消息时间显示修复
 - 后端返回 `YYYY-MM-DD HH:mm:ss` 格式的完整日期时间
 - 前端直接显示 `msg.time`（后端返回的格式）
 
-### 3. LLM 响应修复
+### 2. LLM 响应修复
 - 问题：`"抱歉，回答生成失败"` - MiniMax 返回 ThinkingBlock 导致 TextBlock 检测失败
 - 解决：正确处理 ThinkingBlock，提取 TextBlock 内容
 
-### 4. 会话删除功能（2026-04-27）
+### 3. 会话删除功能（2026-04-27）
 - LawAssistant.vue 和 SuperviseAssistant.vue 的 `clearHistory` 现在会调用 `qaApi.clearMessages()` 清空会话
 - QAChat.vue 添加了 `deleteSession` 函数支持删除会话
 
-### 5. Prompt 优化
+### 4. Prompt 优化
 - 知识内容格式从 `【知识1】标题...` 改为 `[1] 标题\n分类：xxx\n内容`
 - 系统提示明确要求不要在回答中提及知识编号
-
-### 6. 前端页面性能优化（2026-04-27 新增）
-- **QAChat.vue**：
-  - 会话懒加载（不在 onMounted 时自动加载）
-  - 统计数据缓存（5分钟）
-  - 热门问题缓存（5分钟）
-  - Markdown 渲染优化
-- **LawAssistant.vue**：
-  - 移除多余 console.log 语句
-
-### 7. 批量重建向量索引
-- 删除旧 collection，重新创建
-- 执行 `python -m app.scripts.rebuild_vector_index`
-- 结果：33条成功，10条跳过
 
 ## 待完成
 1. 评价功能前端联动
 2. 知识库批量导入
 3. 性能优化（缓存、预热）
-4. 向量搜索效果优化（embedding 模型升级）
-5. 前端详情页加载优化（大数据量渲染卡顿）

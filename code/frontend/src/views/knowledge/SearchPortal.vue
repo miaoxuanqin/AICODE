@@ -22,7 +22,7 @@
 
       <!-- 搜索类型切换 -->
       <div class="search-type-switch">
-        <el-radio-group v-model="searchType" size="small">
+        <el-radio-group v-model="searchType" size="small" @change="handleSearch">
           <el-radio-button value="hybrid">混合搜索</el-radio-button>
           <el-radio-button value="keyword">关键词</el-radio-button>
           <el-radio-button value="vector">语义搜索</el-radio-button>

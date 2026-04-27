@@ -3,11 +3,12 @@ name: 问答助手模块开发状态
 description: 问答助手模块的开发进度、已完成文件、待完成事项
 type: project
 originSessionId: current
+lastUpdated: 2026-04-27
 ---
 
 # 问答助手模块开发状态
 
-> 最后更新：2026-04-26
+> 最后更新：2026-04-27
 
 ## 开发进度
 - 需求分析：✅ 已完成
@@ -33,9 +34,9 @@ originSessionId: current
 | 文件 | 说明 |
 |------|------|
 | `src/api/index.js` | qaApi (chat, stats, hotQuestions, rate, history, session管理) |
-| `src/views/qa/QAChat.vue` | 问答助手页面（消息顺序修复） |
-| `src/views/assistant/LawAssistant.vue` | 执法智能助手（初始化逻辑修复，category='law_general'） |
-| `src/views/assistant/SuperviseAssistant.vue` | 工程监管助手（后端RAG对接，category='supervise'） |
+| `src/views/qa/QAChat.vue` | 问答助手页面 |
+| `src/views/assistant/LawAssistant.vue` | 执法智能助手 |
+| `src/views/assistant/SuperviseAssistant.vue` | 工程监管助手 |
 
 ## 数据库表
 ```sql
@@ -69,11 +70,11 @@ qa_session_message      -- 会话消息表（id, session_id, role, content, crea
 
 不同助手使用不同的 category 实现会话隔离：
 
-| category | 用途 | 页面 | 搜索方式 |
-|----------|------|------|---------|
-| `qa` | 问答助手会话 | QAChat.vue | ES关键词搜索 |
-| `law_general` | 执法助手会话 | LawAssistant.vue | ES关键词搜索 |
-| `supervise` | 工程监管助手会话 | SuperviseAssistant.vue | **Qdrant向量搜索** |
+| category | 用途 | 页面 | 说明 |
+|----------|------|------|------|
+| `qa` | 问答助手会话 | QAChat.vue | 只显示 category='qa' 的会话 |
+| `law_general` | 执法助手会话 | LawAssistant.vue | 自动过滤掉 |
+| `supervise` | 工程监管助手会话 | SuperviseAssistant.vue | 自动过滤掉 |
 
 ## 技术方案
 
@@ -86,53 +87,55 @@ qa_session_message      -- 会话消息表（id, session_id, role, content, crea
 
 | category | 搜索方式 | search_size |
 |----------|---------|------------|
-| `qa` | ES 关键词搜索 | 5 |
-| `law_general` | ES 关键词搜索 | 5 |
-| `supervise` | **Qdrant 向量搜索** | 8 |
+| `qa` | Qdrant 向量搜索 | 5 |
+| `law_general` | Qdrant 向量搜索 | 5 |
+| `supervise` | Qdrant 向量搜索 | 8 |
 
 ### LLM 配置
 | 配置项 | 值 |
 |-------|-----|
-| API_BASE | https://ark.cn-beijing.volces.com/api/coding |
-| AUTH_TOKEN | ark-cd684a2-8027-4e45-843e-8fc4345be2cc-336df |
-| MODEL | minimax-m2.7 |
+| API_BASE | https://api.minimaxi.com/anthropic |
+| AUTH_TOKEN | sk-cp-gPTmjYnqdL4ITzqFsdXjUKxaAwD2xyx2WKeidsK1bMHsqv04X7lFwYlpqaO8WyVGYWAW5OV7yE1rA8lzcHDm3s5GGvYtGTXQk-u1WKjRrLETKSmVqUf2p0g |
+| MODEL | MiniMax-M2.7 |
 
-## 2026-04-26 完成内容
+## 2026-04-27 完成内容
 
-### 向量搜索集成
-- **qa_service.py** supervise 类别自动使用向量搜索
-- 其他类别使用 ES 关键词搜索
-- CATEGORY_CONFIG 配置差异化 system_prompt 和 search_size
+### 1. LLM 响应问题修复
+- **问题**：`"抱歉，回答生成失败"` - MiniMax-M2.7 返回 `ThinkingBlock` 导致 `_call_llm` 无法正确获取 `TextBlock`
+- **解决**：正确处理 ThinkingBlock，提取 TextBlock 内容
 
-### 工程监管助手专属配置
-```python
-CATEGORY_CONFIG = {
-    "supervise": {
-        "name": "工程监管助手",
-        "system_prompt": """你是一个工程监管领域的专家，专注于工程质量安全监督管理工作。
-熟悉以下方面的专业知识：
-- 建设工程质量管理条例
-- 安全生产管理条例
-- 施工现场安全技术规范
-- 工程质量验收标准
-- 常见质量问题识别与处置""",
-        "search_size": 8  #比其他场景多3条知识
-    }
-}
-```
+### 2. Prompt 优化
+- **知识内容格式**：从 `【知识 1】标题...内容` 改为 `[1] 标题\n分类：xxx\n内容`
+- **系统提示**：三个助手的 system_prompt 都添加了明确指令：
+  - "直接整合信息，答案要专业、准确、流畅"
+  - "不要在回答中提及【知识1】、【知识2】、参考信息、知识内容等编号或来源"
 
-### Bug 修复
-1. **问答助手消息顺序错乱** - 添加 currentRequestId 追踪 + timestamp 排序
-2. **执法智能助手初始化为空** - 重构 initSession，先加载已有会话
-3. **普通用户访问管理页面 403** - 路由守卫检查 requireAdmin
-4. **知识详情页 HTML 标签显示** - 使用 v-html 代替 {{ }}
+### 3. 消息时间显示修复
+- 后端 `qa_service.py` 返回 `YYYY-MM-DD HH:mm:ss` 格式的完整日期时间
+- 前端直接显示 `msg.time`（后端返回的格式）
 
-### 功能开发
-1. **手动添加知识功能** - POST /api/v1/knowledge/manual
-2. **工程监管助手后端对接** - category='supervise' 隔离
+### 4. 会话管理功能修复（2026-04-27）
+- **执法智能助手/工程监管助手**：`clearHistory` 现在会调用 `qaApi.clearMessages()` 清空会话
+- **问答助手**：添加了 `deleteSession` 函数支持删除整个会话
+
+### 5. 前端会话过滤修复（2026-04-27）
+- 问答助手只显示 `category === 'qa'` 的会话（之前是 `category !== 'law_general'`，导致 supervise 会话混入）
+
+### 6. 后端重启
+- 修改代码后需要重启 uvicorn 才能生效
+
+## Bug 修复记录
+
+| 日期 | 问题 | 修复 |
+|------|------|------|
+| 2026-04-27 | LLM 返回 "抱歉，回答生成失败" | 正确处理 ThinkingBlock |
+| 2026-04-27 | 回答中显示【知识1】【知识2】 | Prompt 优化，添加明确指令 |
+| 2026-04-27 | 执法/监管助手清空会话无效 | clearHistory 调用 qaApi.clearMessages |
+| 2026-04-27 | 问答助手会话列表混入其他类别 | 过滤条件改为 `category === 'qa'` |
+| 2026-04-27 | 消息时间只显示时间无日期 | 后端返回完整 `YYYY-MM-DD HH:mm:ss` |
 
 ## 待完成
-1. ~~语义搜索~~ ✅ 已完成（工程监管助手向量搜索）
-2. ~~Qdrant 向量搜索集成~~ ✅ 已完成
-3. 富文本编辑器图片上传功能
-4. 评价功能前端数据联动
+1. 评价功能前端联动
+2. 知识库批量导入
+3. 性能优化（缓存、预热）
+4. 会话混乱问题进一步排查（多标签页同时使用）
