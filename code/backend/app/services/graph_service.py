@@ -15,6 +15,14 @@ from app.services.embedding_service import embedding_service
 
 settings = get_settings()
 
+# Neo4j 导入（可选，未安装时优雅降级）
+try:
+    from app.services.neo4j_service import get_neo4j_service, Neo4jService
+    NEO4J_AVAILABLE = True
+except ImportError:
+    NEO4J_AVAILABLE = False
+    get_neo4j_service = None
+
 
 class GraphNode:
     """图谱节点"""
@@ -448,6 +456,363 @@ class GraphService:
         except Exception as e:
             print(f"LLM 调用失败: {e}")
             return "服务暂时不可用"
+
+    # ==================== Neo4j 集成方法 ====================
+
+    def _query_neo4j_context(self, entities: List[Dict]) -> Dict[str, Any]:
+        """
+        查询 Neo4j 获取关联上下文
+
+        Args:
+            entities: 实体列表 [{"text": "...", "type": "..."}]
+
+        Returns:
+            包含 nodes, edges, paths 的字典
+        """
+        if not NEO4J_AVAILABLE:
+            return {"nodes": [], "edges": [], "paths": [], "available": False}
+
+        try:
+            neo4j = get_neo4j_service()
+            if not neo4j.verify_connectivity():
+                print("Neo4j 连接不可用")
+                return {"nodes": [], "edges": [], "paths": [], "available": False}
+
+            all_nodes = []
+            all_edges = []
+            all_paths = []
+
+            # 查询每个实体的关联
+            for entity in entities[:5]:
+                entity_name = entity.get("text", "")
+                if not entity_name:
+                    continue
+
+                # 获取子图
+                subgraph = neo4j.get_subgraph(entity_name, depth=2)
+                if subgraph:
+                    all_nodes.extend(subgraph.get("nodes", []))
+                    all_edges.extend(subgraph.get("edges", []))
+
+                # 查找与其他实体的路径
+                for entity2 in entities:
+                    if entity2.get("text") != entity_name:
+                        paths = neo4j.find_paths(entity_name, entity2.get("text", ""))
+                        all_paths.extend(paths)
+
+            # 去重
+            unique_nodes = self._deduplicate_nodes(all_nodes)
+            unique_edges = self._deduplicate_edges(all_edges)
+
+            return {
+                "nodes": unique_nodes,
+                "edges": unique_edges,
+                "paths": all_paths,
+                "available": True
+            }
+
+        except Exception as e:
+            print(f"Neo4j 查询失败: {e}")
+            return {"nodes": [], "edges": [], "paths": [], "available": False, "error": str(e)}
+
+    def _deduplicate_nodes(self, nodes: List[Dict]) -> List[Dict]:
+        """去重节点"""
+        seen = set()
+        unique = []
+        for node in nodes:
+            node_id = node.get("id", "")
+            if node_id and node_id not in seen:
+                seen.add(node_id)
+                unique.append(node)
+        return unique
+
+    def _deduplicate_edges(self, edges: List[Dict]) -> List[Dict]:
+        """去重边"""
+        seen = set()
+        unique = []
+        for edge in edges:
+            edge_id = f"{edge.get('source')}-{edge.get('type')}-{edge.get('target')}"
+            if edge_id not in seen:
+                seen.add(edge_id)
+                unique.append(edge)
+        return unique
+
+    def _build_graph_from_neo4j(
+        self,
+        neo4j_context: Dict[str, Any],
+        question: str
+    ) -> Tuple[List[Dict], List[Dict]]:
+        """
+        从 Neo4j 上下文构建图谱数据
+
+        Args:
+            neo4j_context: Neo4j 查询结果
+            question: 用户问题
+
+        Returns:
+            (nodes, edges) 元组
+        """
+        nodes = []
+        edges = []
+        node_id_map = {}
+
+        if not neo4j_context.get("available"):
+            # Neo4j 不可用，返回空
+            return nodes, edges
+
+        neo4j_nodes = neo4j_context.get("nodes", [])
+        neo4j_edges = neo4j_context.get("edges", [])
+
+        # 添加问题节点
+        question_node = {
+            "id": "q1",
+            "label": question[:20],
+            "type": "question",
+            "description": "",
+            "attributes": []
+        }
+        nodes.append(question_node)
+        node_id_map["q1"] = 0
+
+        # 添加 Neo4j 节点
+        node_idx = 1
+        for neo4j_node in neo4j_nodes[:10]:  # 限制节点数量
+            node_id = f"n{node_idx}"
+            node = {
+                "id": node_id,
+                "label": neo4j_node.get("name", "")[:20],
+                "type": self._map_neo4j_label_to_type(neo4j_node.get("label", "")),
+                "description": "",
+                "attributes": []
+            }
+            nodes.append(node)
+            node_id_map[neo4j_node.get("id", "")] = node_idx
+            node_idx += 1
+
+        # 添加边
+        edge_idx = 1
+        for neo4j_edge in neo4j_edges[:15]:  # 限制边数量
+            source_id = neo4j_edge.get("source", "")
+            target_id = neo4j_edge.get("target", "")
+
+            if source_id in node_id_map and target_id in node_id_map:
+                edges.append({
+                    "id": f"e{edge_idx}",
+                    "source": node_id_map[source_id],
+                    "target": node_id_map[target_id],
+                    "label": neo4j_edge.get("type", "相关")
+                })
+                edge_idx += 1
+
+        # 布局计算
+        self._layout_nodes(nodes)
+
+        return nodes, edges
+
+    def _map_neo4j_label_to_type(self, label: str) -> str:
+        """将 Neo4j 标签映射为前端类型"""
+        mapping = {
+            "Law": "law",
+            "Article": "article",
+            "Standard": "standard",
+            "Penalty": "penalty",
+            "Case": "case",
+            "Subject": "subject",
+            "Behavior": "behavior"
+        }
+        return mapping.get(label, "law")
+
+    def reason_with_neo4j(
+        self,
+        question: str,
+        user_id: str = None,
+        db=None
+    ) -> Dict[str, Any]:
+        """
+        使用 Neo4j 增强的图谱推理问答
+
+        Args:
+            question: 用户问题
+            user_id: 用户ID
+            db: 数据库会话
+
+        Returns:
+            包含 answer, reasoning_chain, graph_data, citations 的字典
+        """
+        reasoning_chain = []
+        all_search_items = []
+        final_answer = ""
+
+        # Step 1: 实体识别
+        step1_entities = self.extract_entities(question)
+        reasoning_chain.append({
+            "step": 1,
+            "query": "理解问题并识别关键实体",
+            "result": f"识别到 {len(step1_entities)} 个关键实体",
+            "entities": [e["text"] for e in step1_entities[:5]],
+            "details": {
+                "search_query": question,
+                "knowledge_found": []
+            }
+        })
+
+        # Step 2: 第一次搜索 - 精确匹配
+        first_query = question
+        try:
+            query_vector = embedding_service.encode_single(first_query)
+            knowledge_ids = search_service.search_vector(
+                query_vector=query_vector,
+                user_id=user_id or "anonymous",
+                limit=6
+            )
+            items = []
+            for kid in knowledge_ids:
+                doc = search_service.get_by_id(kid)
+                if doc:
+                    items.append(doc)
+            first_results = {"items": items, "total": len(items)}
+        except Exception as e:
+            print(f"向量搜索失败: {e}")
+            first_results = search_service.search_keyword(
+                query=first_query,
+                user_id=user_id or "anonymous",
+                page=1,
+                page_size=6
+            )
+
+        reasoning_chain.append({
+            "step": 2,
+            "query": "检索相关知识库内容",
+            "result": f"找到 {first_results['total']} 条相关知识",
+            "entities": [],
+            "details": {
+                "search_query": first_query,
+                "knowledge_found": [item.get("title", "") for item in first_results.get("items", [])]
+            }
+        })
+
+        all_search_items.extend(first_results.get("items", []))
+
+        # Step 3: Neo4j 图谱推理（替代原来的关系扩展）
+        neo4j_context = self._query_neo4j_context(step1_entities)
+
+        if neo4j_context.get("available"):
+            reasoning_chain.append({
+                "step": 3,
+                "query": "Neo4j 图谱推理",
+                "result": f"找到 {len(neo4j_context.get('nodes', []))} 个关联实体",
+                "entities": [],
+                "details": {
+                    "search_query": "",
+                    "knowledge_found": [n.get("name", "") for n in neo4j_context.get("nodes", [])[:5]]
+                }
+            })
+
+            # 构建图谱数据
+            nodes, edges = self._build_graph_from_neo4j(neo4j_context, question)
+            graph_data = {"nodes": nodes, "edges": edges}
+        else:
+            # Fallback: 使用原来的扩展逻辑
+            expand_query = self._generate_expand_query(question, first_results.get("items", []))
+            if expand_query and expand_query != first_query:
+                try:
+                    query_vector = embedding_service.encode_single(expand_query)
+                    knowledge_ids = search_service.search_vector(
+                        query_vector=query_vector,
+                        user_id=user_id or "anonymous",
+                        limit=4
+                    )
+                    items = []
+                    for kid in knowledge_ids:
+                        doc = search_service.get_by_id(kid)
+                        if doc:
+                            items.append(doc)
+                    second_results = {"items": items, "total": len(items)}
+                except Exception:
+                    second_results = search_service.search_keyword(
+                        query=expand_query,
+                        user_id=user_id or "anonymous",
+                        page=1,
+                        page_size=4
+                    )
+
+                reasoning_chain.append({
+                    "step": 3,
+                    "query": "扩展关联知识",
+                    "result": f"补充找到 {second_results['total']} 条关联知识",
+                    "entities": [],
+                    "details": {
+                        "search_query": expand_query,
+                        "knowledge_found": [item.get("title", "") for item in second_results.get("items", [])]
+                    }
+                })
+                all_search_items.extend(second_results.get("items", []))
+            else:
+                reasoning_chain.append({
+                    "step": 3,
+                    "query": "扩展关联知识",
+                    "result": "无需扩展",
+                    "entities": [],
+                    "details": {
+                        "search_query": "",
+                        "knowledge_found": []
+                    }
+                })
+
+            # 构建图谱数据（使用原来的方式）
+            graph_entities = step1_entities if step1_entities else [{"text": question[:20], "type": "question"}]
+            nodes, edges = self.build_graph(graph_entities, all_search_items[:6])
+            graph_data = {"nodes": nodes, "edges": edges}
+
+        # Step 4: 去重
+        seen_ids = set()
+        unique_items = []
+        for item in all_search_items:
+            if item.get("id") not in seen_ids:
+                seen_ids.add(item.get("id"))
+                unique_items.append(item)
+
+        reasoning_chain.append({
+            "step": 4,
+            "query": "整合知识并生成回答",
+            "result": f"整合 {len(unique_items)} 条知识进行回答",
+            "entities": [],
+            "details": {
+                "search_query": "",
+                "knowledge_found": [item.get("title", "") for item in unique_items]
+            }
+        })
+
+        # Step 5: 生成回答
+        if unique_items:
+            final_answer = self._generate_answer(question, unique_items)
+        else:
+            final_answer = "抱歉，知识库中没有找到与您问题相关的内容。"
+
+        # Step 6: 构建引用来源
+        citations = []
+        for item in unique_items[:5]:
+            category = item.get("category", "tech")
+            type_names = {
+                "law": "法规",
+                "case": "案例",
+                "policy": "政策",
+                "tech": "技术",
+                "article": "条款"
+            }
+            citations.append({
+                "id": item.get("id", ""),
+                "type": category,
+                "typeName": type_names.get(category, "知识"),
+                "title": item.get("title", "")
+            })
+
+        return {
+            "answer": final_answer,
+            "reasoning_chain": reasoning_chain,
+            "graph_data": graph_data,
+            "citations": citations
+        }
 
 
 graph_service = GraphService()

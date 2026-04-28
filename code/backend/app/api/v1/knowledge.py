@@ -1,6 +1,7 @@
 import os
 import re
 import uuid
+import asyncio
 import tempfile
 import redis
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
@@ -21,11 +22,39 @@ from app.services.minio_service import minio_service
 from app.services.search_service import search_service
 from core.rbac import get_current_user
 
+# Neo4j 导入（可选）
+try:
+    from app.services.graph_extractor import get_graph_extractor
+    GRAPH_EXTRACTOR_AVAILABLE = True
+except ImportError:
+    GRAPH_EXTRACTOR_AVAILABLE = False
+    get_graph_extractor = None
+
 router = APIRouter(prefix="/knowledge", tags=["知识管理"])
 
 settings = get_settings()
 redis_client = redis.from_url(settings.redis_url, decode_responses=True)
 HOT_TERMS_KEY = "search:hot_terms"
+
+
+def _sync_knowledge_to_neo4j(knowledge_id: str, content: str):
+    """
+    异步同步知识到 Neo4j（后台执行，不阻塞主流程）
+
+    Args:
+        knowledge_id: 知识ID
+        content: 知识内容
+    """
+    if not GRAPH_EXTRACTOR_AVAILABLE or not content:
+        return
+
+    try:
+        extractor = get_graph_extractor()
+        stats = extractor.sync_to_neo4j(knowledge_id, content)
+        print(f"Neo4j 同步完成: knowledge_id={knowledge_id}, "
+              f"entities={stats['entities_created']}, relations={stats['relations_created']}")
+    except Exception as e:
+        print(f"Neo4j 同步失败: {e}")
 
 
 CATEGORY_NAMES = {
@@ -156,6 +185,12 @@ async def upload_knowledge(
                 category=category,
                 user_id=str(current_user.id)
             )
+
+            # 异步同步到 Neo4j（图谱抽取，不阻塞主流程）
+            if parsed_content:
+                asyncio.create_task(
+                    asyncio.to_thread(_sync_knowledge_to_neo4j, knowledge_id, parsed_content)
+                )
         except Exception as e:
             print(f"索引失败: {e}")
             pass  # 索引失败不影响主流程
@@ -226,6 +261,12 @@ async def create_knowledge_manual(
             category=knowledge_data.category,
             user_id=str(current_user.id)
         )
+
+        # 异步同步到 Neo4j（图谱抽取，不阻塞主流程）
+        if knowledge_data.content:
+            asyncio.create_task(
+                asyncio.to_thread(_sync_knowledge_to_neo4j, knowledge_id, knowledge_data.content)
+            )
     except Exception as e:
         print(f"索引失败: {e}")
         pass  # 索引失败不影响主流程
@@ -601,6 +642,18 @@ def delete_knowledge(
         search_service.delete_knowledge_index(knowledge_id)
     except Exception:
         pass
+
+    # 删除 Neo4j 相关数据（通过 knowledge_id 关联的实体）
+    try:
+        if GRAPH_EXTRACTOR_AVAILABLE:
+            extractor = get_graph_extractor()
+            stats = extractor.delete_from_neo4j(knowledge_id)
+            print(f"Neo4j 清理完成: knowledge_id={knowledge_id}, "
+                  f"checked={stats['entities_checked']}, "
+                  f"deleted={stats['entities_deleted']}, "
+                  f"retained={stats['entities_retained']}")
+    except Exception as e:
+        print(f"Neo4j 清理失败: {e}")
 
     # 删除数据库记录
     db.delete(knowledge)

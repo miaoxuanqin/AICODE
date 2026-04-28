@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     anthropic_base_url: str = "https://api.minimaxi.com/anthropic"
     anthropic_default_haiku_model: str = "MiniMax-M2.7"
 
+    # Neo4j
+    neo4j_uri: str = "bolt://172.20.36.91:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: str = "neo4j123"
+
     class Config:
         env_file = ".env"
         extra = "allow"

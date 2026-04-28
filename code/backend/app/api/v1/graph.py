@@ -10,6 +10,15 @@ from app.config import get_settings
 from app.services.graph_service import graph_service
 from core.rbac import get_current_user
 
+# Neo4j 导入（可选）
+try:
+    from app.services.neo4j_service import get_neo4j_service, NEO4J_AVAILABLE
+    from app.services.graph_extractor import get_graph_extractor
+except ImportError:
+    NEO4J_AVAILABLE = False
+    get_neo4j_service = None
+    get_graph_extractor = None
+
 router = APIRouter(prefix="/graph", tags=["图谱问答"])
 
 settings = get_settings()
@@ -19,6 +28,7 @@ class GraphQARequest(BaseModel):
     """图谱问答请求"""
     question: str
     session_id: Optional[str] = None
+    use_neo4j: Optional[bool] = False  # 是否使用 Neo4j 增强推理
 
 
 class GraphNodeData(BaseModel):
@@ -75,16 +85,23 @@ async def graph_qa(
 
     1. 实体识别 - 理解问题关键实体
     2. 知识检索 - 从知识库检索相关内容
-    3. 多跳推理 - 扩展关联知识
+    3. 多跳推理 - 扩展关联知识（可选择使用 Neo4j）
     4. 图谱构建 - 可视化实体关系
     5. 回答生成 - 综合知识生成回答
     """
     user_id = str(current_user.id)
 
-    result = graph_service.reason(
-        question=request.question,
-        user_id=user_id
-    )
+    # 根据 use_neo4j 参数选择推理方式
+    if request.use_neo4j and NEO4J_AVAILABLE:
+        result = graph_service.reason_with_neo4j(
+            question=request.question,
+            user_id=user_id
+        )
+    else:
+        result = graph_service.reason(
+            question=request.question,
+            user_id=user_id
+        )
 
     return GraphQAResponse(
         answer=result["answer"],
@@ -113,3 +130,111 @@ def build_graph(
     search_results = []
     nodes, edges = graph_service.build_graph(entities, search_results)
     return {"nodes": nodes, "edges": edges}
+
+
+# ==================== Neo4j API ====================
+
+@router.get("/neo4j/status")
+def neo4j_status(current_user = Depends(get_current_user)):
+    """查询 Neo4j 连接状态"""
+    if not NEO4J_AVAILABLE:
+        return {
+            "available": False,
+            "message": "Neo4j 驱动未安装"
+        }
+
+    try:
+        neo4j = get_neo4j_service()
+        connected = neo4j.verify_connectivity()
+        stats = neo4j.get_stats() if connected else {}
+
+        return {
+            "available": connected,
+            "stats": stats,
+            "uri": settings.neo4j_uri
+        }
+    except Exception as e:
+        return {
+            "available": False,
+            "message": str(e)
+        }
+
+
+@router.get("/neo4j/entity/{entity_name}")
+def get_entity_graph(
+    entity_name: str,
+    depth: int = Query(2, ge=1, le=4, description="查询深度"),
+    current_user = Depends(get_current_user)
+):
+    """获取实体的关联图谱"""
+    if not NEO4J_AVAILABLE:
+        return {"error": "Neo4j 驱动未安装"}
+
+    try:
+        neo4j = get_neo4j_service()
+        subgraph = neo4j.get_subgraph(entity_name, depth=depth)
+        return subgraph
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/neo4j/path")
+def find_entity_paths(
+    from_name: str = Query(..., description="起始实体"),
+    to_name: str = Query(..., description="目标实体"),
+    max_depth: int = Query(4, ge=1, le=6, description="最大深度"),
+    current_user = Depends(get_current_user)
+):
+    """查找两实体间的路径"""
+    if not NEO4J_AVAILABLE:
+        return {"error": "Neo4j 驱动未安装"}
+
+    try:
+        neo4j = get_neo4j_service()
+        paths = neo4j.find_paths(from_name, to_name, max_depth=max_depth)
+        return {"paths": paths}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.post("/neo4j/sync/{knowledge_id}")
+def sync_knowledge_to_neo4j(
+    knowledge_id: str,
+    text: str = Query(..., description="知识内容"),
+    current_user = Depends(get_current_user)
+):
+    """同步知识到 Neo4j"""
+    if not NEO4J_AVAILABLE:
+        return {"error": "Neo4j 驱动未安装"}
+
+    if not get_graph_extractor:
+        return {"error": "Graph Extractor 未安装"}
+
+    try:
+        extractor = get_graph_extractor()
+        stats = extractor.sync_to_neo4j(knowledge_id, text)
+        return {
+            "success": True,
+            "knowledge_id": knowledge_id,
+            "stats": stats
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/neo4j/entities/{label}")
+def get_entities_by_type(
+    label: str,
+    limit: int = Query(100, ge=1, le=500, description="返回数量"),
+    current_user = Depends(get_current_user)
+):
+    """按类型获取实体列表"""
+    if not NEO4J_AVAILABLE:
+        return {"error": "Neo4j 驱动未安装"}
+
+    try:
+        neo4j = get_neo4j_service()
+        entities = neo4j.get_entity_by_type(label, limit=limit)
+        return {"label": label, "count": len(entities), "entities": entities}
+    except Exception as e:
+        return {"error": str(e)}

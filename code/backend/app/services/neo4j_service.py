@@ -1,0 +1,721 @@
+"""
+Neo4j 图数据库服务
+提供节点和关系的 CRUD 操作，以及图谱查询功能
+"""
+import uuid
+from datetime import datetime
+from typing import List, Dict, Any, Optional, Tuple
+
+from neo4j import GraphDatabase
+from neo4j.exceptions import ServiceUnavailable, AuthError
+
+from app.config import get_settings
+
+settings = get_settings()
+
+
+class Neo4jNodeNotFoundError(Exception):
+    """节点不存在"""
+    pass
+
+
+class Neo4jService:
+    """Neo4j 操作服务"""
+
+    def __init__(
+        self,
+        uri: str = None,
+        user: str = None,
+        password: str = None
+    ):
+        self.uri = uri or settings.neo4j_uri
+        self.user = user or settings.neo4j_user
+        self.password = password or settings.neo4j_password
+        self._driver = None
+
+    @property
+    def driver(self):
+        """延迟初始化 Neo4j 驱动"""
+        if self._driver is None:
+            self._driver = GraphDatabase.driver(
+                self.uri,
+                auth=(self.user, self.password)
+            )
+        return self._driver
+
+    def close(self):
+        """关闭连接"""
+        if self._driver:
+            self._driver.close()
+            self._driver = None
+
+    def verify_connectivity(self) -> bool:
+        """验证连接是否正常"""
+        try:
+            with self.driver.session() as session:
+                result = session.run("RETURN 1 AS test")
+                return result.single()["test"] == 1
+        except (ServiceUnavailable, AuthError) as e:
+            print(f"Neo4j 连接失败: {e}")
+            return False
+
+    # ==================== 节点操作 ====================
+
+    def upsert_node(
+        self,
+        label: str,
+        name: str,
+        properties: Dict[str, Any] = None,
+        knowledge_id: str = None
+    ) -> bool:
+        """
+        插入或更新节点（MATCH + SET）
+
+        Args:
+            label: 节点标签 (Law, Article, Standard, etc.)
+            name: 节点名称（唯一标识）
+            properties: 其他属性
+            knowledge_id: 关联的知识ID（用于引用计数）
+
+        Returns:
+            bool: 操作是否成功
+        """
+        properties = properties or {}
+        properties["name"] = name
+        properties["updated_at"] = datetime.now().isoformat()
+
+        # 如果没有 created_at，添加创建时间
+        if "created_at" not in properties:
+            properties["created_at"] = datetime.now().isoformat()
+
+        query = f"""
+        MERGE (n:{label} {{name: $name}})
+        SET n += $properties
+        """
+
+        # 如果传入了 knowledge_id，添加引用
+        if knowledge_id:
+            query += f"""
+            WITH n
+            MERGE (n)-[:EXTRACTED_FROM]->(k {{knowledge_id: $knowledge_id}})
+            """
+
+        query += " RETURN n.name AS name"
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, name=name, properties=properties, knowledge_id=knowledge_id)
+                return result.single() is not None
+        except Exception as e:
+            print(f"upsert_node 失败: {e}")
+            return False
+
+    def get_node(self, label: str, name: str) -> Optional[Dict[str, Any]]:
+        """
+        获取节点
+
+        Args:
+            label: 节点标签
+            name: 节点名称
+
+        Returns:
+            节点属性字典，不存在返回 None
+        """
+        query = f"""
+        MATCH (n:{label} {{name: $name}})
+        RETURN n
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, name=name)
+                record = result.single()
+                if record:
+                    return dict(record["n"])
+                return None
+        except Exception as e:
+            print(f"get_node 失败: {e}")
+            return None
+
+    def delete_node(self, label: str, name: str) -> bool:
+        """
+        删除节点及其所有关系
+
+        Args:
+            label: 节点标签
+            name: 节点名称
+
+        Returns:
+            bool: 操作是否成功
+        """
+        query = f"""
+        MATCH (n:{label} {{name: $name}})
+        DETACH DELETE n
+        """
+
+        try:
+            with self.driver.session() as session:
+                session.run(query, name=name)
+                return True
+        except Exception as e:
+            print(f"delete_node 失败: {e}")
+            return False
+
+    def node_exists(self, label: str, name: str) -> bool:
+        """检查节点是否存在"""
+        query = f"""
+        MATCH (n:{label} {{name: $name}})
+        RETURN count(n) AS count
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, name=name)
+                record = result.single()
+                return record["count"] > 0 if record else False
+        except Exception as e:
+            print(f"node_exists 失败: {e}")
+            return False
+
+    # ==================== 关系操作 ====================
+
+    def create_relation(
+        self,
+        from_name: str,
+        from_label: str,
+        to_name: str,
+        to_label: str,
+        rel_type: str,
+        rel_properties: Dict[str, Any] = None
+    ) -> bool:
+        """
+        创建关系
+
+        Args:
+            from_name: 起始节点名称
+            from_label: 起始节点标签
+            to_name: 目标节点名称
+            to_label: 目标节点标签
+            rel_type: 关系类型 (CONTAINS, REFERS, etc.)
+            rel_properties: 关系属性
+
+        Returns:
+            bool: 操作是否成功
+        """
+        rel_properties = rel_properties or {}
+        rel_properties["created_at"] = datetime.now().isoformat()
+        rel_properties["updated_at"] = datetime.now().isoformat()
+
+        query = f"""
+        MATCH (a:{from_label} {{name: $from_name}})
+        MATCH (b:{to_label} {{name: $to_name}})
+        MERGE (a)-[r:{rel_type}]->(b)
+        SET r += $rel_properties
+        RETURN r
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(
+                    query,
+                    from_name=from_name,
+                    to_name=to_name,
+                    rel_properties=rel_properties
+                )
+                return result.single() is not None
+        except Exception as e:
+            print(f"create_relation 失败: {e}")
+            return False
+
+    def delete_relation(
+        self,
+        from_name: str,
+        to_name: str,
+        rel_type: str
+    ) -> bool:
+        """删除关系"""
+        query = f"""
+        MATCH (a {{name: $from_name}})-[r:{rel_type}]->(b {{name: $to_name}})
+        DELETE r
+        """
+
+        try:
+            with self.driver.session() as session:
+                session.run(query, from_name=from_name, to_name=to_name)
+                return True
+        except Exception as e:
+            print(f"delete_relation 失败: {e}")
+            return False
+
+    def get_entities_by_knowledge_id(self, knowledge_id: str) -> List[Dict[str, Any]]:
+        """
+        获取与指定知识ID关联的所有实体
+
+        Args:
+            knowledge_id: 知识ID
+
+        Returns:
+            实体列表
+        """
+        query = """
+        MATCH (n)-[:EXTRACTED_FROM]->(:{knowledge_id_label} {knowledge_id: $knowledge_id})
+        RETURN n, labels(n)[0] AS label
+        """.format(knowledge_id_label="{knowledge_id_label}")
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(
+                    query.replace("{knowledge_id_label}", ""),
+                    knowledge_id=knowledge_id
+                )
+                entities = []
+                for record in result:
+                    node = dict(record["n"])
+                    node["label"] = record["label"]
+                    entities.append(node)
+                return entities
+        except Exception as e:
+            print(f"get_entities_by_knowledge_id 失败: {e}")
+            return []
+
+    def get_node_ref_count(self, label: str, name: str) -> int:
+        """
+        获取节点被多少个知识引用
+
+        Args:
+            label: 节点标签
+            name: 节点名称
+
+        Returns:
+            引用数量
+        """
+        query = f"""
+        MATCH (n:{label} {{name: $name}})-[:EXTRACTED_FROM]->(k)
+        RETURN count(k) AS ref_count
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, name=name)
+                record = result.single()
+                return record["ref_count"] if record else 0
+        except Exception as e:
+            print(f"get_node_ref_count 失败: {e}")
+            return 0
+
+    def delete_node_and_relations(self, label: str, name: str) -> bool:
+        """
+        删除节点及其所有关系（不检查引用计数）
+
+        Args:
+            label: 节点标签
+            name: 节点名称
+
+        Returns:
+            bool: 操作是否成功
+        """
+        query = f"""
+        MATCH (n:{label} {{name: $name}})
+        DETACH DELETE n
+        """
+
+        try:
+            with self.driver.session() as session:
+                session.run(query, name=name)
+                return True
+        except Exception as e:
+            print(f"delete_node_and_relations 失败: {e}")
+            return False
+
+    def remove_knowledge_reference(self, knowledge_id: str) -> Dict[str, Any]:
+        """
+        移除知识引用，如果实体不再被任何知识引用则删除
+
+        Args:
+            knowledge_id: 知识ID
+
+        Returns:
+            清理结果统计
+        """
+        stats = {
+            "entities_checked": 0,
+            "entities_deleted": 0,
+            "entities_retained": 0,
+            "relations_deleted": 0
+        }
+
+        # 找到该知识引用的所有实体
+        query = """
+        MATCH (n)-[r:EXTRACTED_FROM]->(k {knowledge_id: $knowledge_id})
+        RETURN n, labels(n)[0] AS label
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, knowledge_id=knowledge_id)
+
+                for record in result:
+                    stats["entities_checked"] += 1
+                    node = record["n"]
+                    node_label = record["label"]
+                    node_name = node.get("name", "")
+
+                    if not node_name:
+                        continue
+
+                    # 删除 EXTRACTED_FROM 关系
+                    delete_ref_query = f"""
+                    MATCH (n:{node_label} {{name: $name}})-[r:EXTRACTED_FROM]->(k {{knowledge_id: $knowledge_id}})
+                    DELETE r
+                    """
+                    session.run(delete_ref_query, name=node_name, knowledge_id=knowledge_id)
+
+                    # 检查是否还有其他知识引用
+                    ref_count_query = f"""
+                    MATCH (n:{node_label} {{name: $name}})-[:EXTRACTED_FROM]->()
+                    RETURN count(*) AS ref_count
+                    """
+                    ref_result = session.run(ref_count_query, name=node_name)
+                    ref_record = ref_result.single()
+                    ref_count = ref_record["ref_count"] if ref_record else 0
+
+                    if ref_count == 0:
+                        # 没有其他引用了，删除该实体及其所有关系
+                        delete_query = f"""
+                        MATCH (n:{node_label} {{name: $name}})
+                        DETACH DELETE n
+                        """
+                        session.run(delete_query, name=node_name)
+                        stats["entities_deleted"] += 1
+                    else:
+                        stats["entities_retained"] += 1
+
+        except Exception as e:
+            print(f"remove_knowledge_reference 失败: {e}")
+
+        return stats
+
+    def relation_exists(
+        self,
+        from_name: str,
+        to_name: str,
+        rel_type: str
+    ) -> bool:
+        """检查关系是否存在"""
+        query = f"""
+        MATCH (a {{name: $from_name}})-[r:{rel_type}]->(b {{name: $to_name}})
+        RETURN count(r) AS count
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, from_name=from_name, to_name=to_name)
+                record = result.single()
+                return record["count"] > 0 if record else False
+        except Exception as e:
+            print(f"relation_exists 失败: {e}")
+            return False
+
+    # ==================== 图谱查询 ====================
+
+    def get_related_entities(
+        self,
+        entity_name: str,
+        depth: int = 2
+    ) -> List[Dict[str, Any]]:
+        """
+        获取实体关联的所有节点和关系
+
+        Args:
+            entity_name: 实体名称
+            depth: 查询深度（跳数）
+
+        Returns:
+            包含 nodes 和 edges 的字典列表
+        """
+        query = f"""
+        MATCH path = (e)-[*1..{depth}]-(related)
+        WHERE e.name = $entity_name
+        WITH path, relationships(path) AS rels
+        UNWIND nodes(path) AS node
+        WITH path, collect(DISTINCT node) AS all_nodes, rels
+        UNWIND rels AS rel
+        WITH path, all_nodes, rel,
+             startNode(rel) AS start,
+             endNode(rel) AS end
+        RETURN DISTINCT
+               collect(DISTINCT {{id: id(start), name: start.name, label: labels(start)[0]}}) AS source_nodes,
+               collect(DISTINCT {{id: id(end), name: end.name, label: labels(end)[0]}}) AS target_nodes,
+               collect(DISTINCT {{type: type(rel)}}) AS rel_types
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, entity_name=entity_name)
+                records = result.data()
+                return records
+        except Exception as e:
+            print(f"get_related_entities 失败: {e}")
+            return []
+
+    def find_paths(
+        self,
+        from_name: str,
+        to_name: str,
+        max_depth: int = 4
+    ) -> List[Dict[str, Any]]:
+        """
+        查找两实体间的所有路径
+
+        Args:
+            from_name: 起始实体名称
+            to_name: 目标实体名称
+            max_depth: 最大深度
+
+        Returns:
+            路径列表
+        """
+        query = f"""
+        MATCH path = (a {{name: $from_name}})-[*1..{max_depth}]-(b {{name: $to_name}})
+        RETURN path
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(
+                    query,
+                    from_name=from_name,
+                    to_name=to_name
+                )
+                paths = []
+                for record in result:
+                    path = record["path"]
+                    nodes = []
+                    edges = []
+                    for i, node in enumerate(path.nodes):
+                        nodes.append({
+                            "id": str(node.id),
+                            "name": node.get("name", ""),
+                            "label": list(node.labels)[0] if node.labels else ""
+                        })
+                        if i > 0:
+                            rel = path.relationships[i - 1]
+                            edges.append({
+                                "source": str(path.nodes[i - 1].id),
+                                "target": str(node.id),
+                                "type": type(rel).__name__
+                            })
+                    paths.append({"nodes": nodes, "edges": edges})
+                return paths
+        except Exception as e:
+            print(f"find_paths 失败: {e}")
+            return []
+
+    def get_subgraph(
+        self,
+        entity_name: str,
+        depth: int = 2
+    ) -> Dict[str, Any]:
+        """
+        获取实体周围的子图
+
+        Args:
+            entity_name: 实体名称
+            depth: 深度
+
+        Returns:
+            包含 nodes 和 edges 的字典
+        """
+        query = f"""
+        MATCH path = (e)-[*1..{depth}]-(connected)
+        WHERE e.name = $entity_name
+        WITH collect(DISTINCT path) AS all_paths
+        RETURN all_paths
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, entity_name=entity_name)
+                record = result.single()
+
+                if not record:
+                    return {"nodes": [], "edges": []}
+
+                all_paths = record["all_paths"]
+                node_map = {}
+                edge_list = []
+
+                for path in all_paths:
+                    for i, node in enumerate(path.nodes):
+                        node_id = str(node.id)
+                        if node_id not in node_map:
+                            node_map[node_id] = {
+                                "id": node_id,
+                                "name": node.get("name", ""),
+                                "label": list(node.labels)[0] if node.labels else ""
+                            }
+                        if i > 0:
+                            rel = path.relationships[i - 1]
+                            edge_id = str(rel.id)
+                            edge_list.append({
+                                "id": edge_id,
+                                "source": str(path.nodes[i - 1].id),
+                                "target": str(node.id),
+                                "type": type(rel).__name__
+                            })
+
+                return {
+                    "nodes": list(node_map.values()),
+                    "edges": edge_list
+                }
+        except Exception as e:
+            print(f"get_subgraph 失败: {e}")
+            return {"nodes": [], "edges": []}
+
+    def get_entity_by_type(
+        self,
+        label: str,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        按类型获取实体列表
+
+        Args:
+            label: 节点标签
+            limit: 返回数量限制
+
+        Returns:
+            实体列表
+        """
+        query = f"""
+        MATCH (n:{label})
+        RETURN n
+        LIMIT $limit
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, limit=limit)
+                return [dict(record["n"]) for record in result]
+        except Exception as e:
+            print(f"get_entity_by_type 失败: {e}")
+            return []
+
+    # ==================== 统计 ====================
+
+    def get_stats(self) -> Dict[str, int]:
+        """获取图谱统计信息"""
+        node_query = """
+        MATCH (n)
+        RETURN labels(n)[0] AS label, count(*) AS count
+        """
+
+        rel_query = """
+        MATCH ()-[r]-()
+        RETURN type(r) AS label, count(*) AS count
+        """
+
+        try:
+            with self.driver.session() as session:
+                node_result = session.run(node_query)
+                rel_result = session.run(rel_query)
+
+                stats = {}
+                for record in node_result:
+                    stats[f"node:{record['label']}"] = record["count"]
+                for record in rel_result:
+                    stats[f"rel:{record['label']}"] = record["count"]
+
+                return stats
+        except Exception as e:
+            print(f"get_stats 失败: {e}")
+            return {}
+
+    def clear_all(self) -> bool:
+        """清空所有节点和关系（危险操作！）"""
+        query = """
+        MATCH (n)
+        DETACH DELETE n
+        """
+
+        try:
+            with self.driver.session() as session:
+                session.run(query)
+                return True
+        except Exception as e:
+            print(f"clear_all 失败: {e}")
+            return False
+
+    # ==================== 批量操作 ====================
+
+    def batch_upsert_nodes(
+        self,
+        label: str,
+        nodes: List[Dict[str, Any]]
+    ) -> int:
+        """
+        批量插入或更新节点
+
+        Args:
+            label: 节点标签
+            nodes: 节点列表，每个节点包含 name 和其他属性
+
+        Returns:
+            成功插入的数量
+        """
+        success_count = 0
+        for node in nodes:
+            name = node.get("name")
+            if not name:
+                continue
+            properties = {k: v for k, v in node.items() if k != "name"}
+            if self.upsert_node(label, name, properties):
+                success_count += 1
+        return success_count
+
+    def batch_create_relations(
+        self,
+        relations: List[Dict[str, str]]
+    ) -> int:
+        """
+        批量创建关系
+
+        Args:
+            relations: 关系列表，每个包含 from_name, from_label, to_name, to_label, rel_type
+
+        Returns:
+            成功创建的数量
+        """
+        success_count = 0
+        for rel in relations:
+            if all(k in rel for k in ["from_name", "from_label", "to_name", "to_label", "rel_type"]):
+                if self.create_relation(
+                    rel["from_name"],
+                    rel["from_label"],
+                    rel["to_name"],
+                    rel["to_label"],
+                    rel["rel_type"],
+                    rel.get("properties")
+                ):
+                    success_count += 1
+        return success_count
+
+
+# 全局单例
+_neo4j_service: Optional[Neo4jService] = None
+
+
+def get_neo4j_service() -> Neo4jService:
+    """获取 Neo4j 服务单例"""
+    global _neo4j_service
+    if _neo4j_service is None:
+        _neo4j_service = Neo4jService()
+    return _neo4j_service
+
+
+def close_neo4j_service():
+    """关闭 Neo4j 服务"""
+    global _neo4j_service
+    if _neo4j_service is not None:
+        _neo4j_service.close()
+        _neo4j_service = None

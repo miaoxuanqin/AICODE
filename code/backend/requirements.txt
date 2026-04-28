@@ -33,5 +33,8 @@ qdrant-client==1.7.1
 # MinIO
 minio==7.2.0
 
+# Neo4j
+neo4j==5.14.0
+
 # Windows COM (for .doc parsing)
 pywin32>=300
