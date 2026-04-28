@@ -1,0 +1,11 @@
+[Unit]
+Description=Docker Services for Knowledge Base
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/bin/docker start redis qdrant elasticsearch neo4j
+ExecStop=/usr/bin/docker stop redis qdrant elasticsearch neo4j
+
+[Install]
+WantedBy=default.target
