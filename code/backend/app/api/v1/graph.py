@@ -238,3 +238,98 @@ def get_entities_by_type(
         return {"label": label, "count": len(entities), "entities": entities}
     except Exception as e:
         return {"error": str(e)}
+
+
+# ==================== 图谱浏览 API ====================
+
+@router.get("/explorer/stats")
+def get_graph_stats(current_user = Depends(get_current_user)):
+    """获取图谱统计信息"""
+    if not NEO4J_AVAILABLE:
+        return {"available": False, "message": "Neo4j 驱动未安装"}
+
+    try:
+        neo4j = get_neo4j_service()
+        if not neo4j.verify_connectivity():
+            return {"available": False, "message": "Neo4j 连接失败"}
+
+        stats = neo4j.get_graph_stats()
+        return {
+            "available": True,
+            "total_nodes": stats["total_nodes"],
+            "total_edges": stats["total_edges"],
+            "by_type": stats.get("by_type", {})
+        }
+    except Exception as e:
+        return {"available": False, "message": str(e)}
+
+
+@router.get("/explorer/center")
+def get_center_nodes(
+    limit: int = Query(50, ge=10, le=100, description="返回节点数"),
+    current_user = Depends(get_current_user)
+):
+    """获取中心节点（采样展示）"""
+    if not NEO4J_AVAILABLE:
+        return {"error": "Neo4j 驱动未安装"}
+
+    try:
+        neo4j = get_neo4j_service()
+        result = neo4j.get_center_nodes(limit=limit)
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/explorer/neighbors/{node_name:path}")
+def get_node_neighbors(
+    node_name: str,
+    depth: int = Query(1, ge=1, le=2, description="展开深度"),
+    current_user = Depends(get_current_user)
+):
+    """获取节点的邻居"""
+    if not NEO4J_AVAILABLE:
+        return {"error": "Neo4j 驱动未安装"}
+
+    try:
+        neo4j = get_neo4j_service()
+        result = neo4j.get_neighbors(node_name, depth=depth)
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/explorer/search")
+def search_graph_nodes(
+    q: str = Query(..., min_length=1, description="搜索关键词"),
+    label: str = Query(None, description="按类型筛选"),
+    limit: int = Query(20, ge=1, le=50, description="返回数量"),
+    current_user = Depends(get_current_user)
+):
+    """搜索实体"""
+    if not NEO4J_AVAILABLE:
+        return {"error": "Neo4j 驱动未安装"}
+
+    try:
+        neo4j = get_neo4j_service()
+        results = neo4j.search_nodes(keyword=q, label=label, limit=limit)
+        return {"results": results, "query": q}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@router.get("/explorer/node/{node_name:path}/relations")
+def get_node_relations(
+    node_name: str,
+    current_user = Depends(get_current_user)
+):
+    """获取节点的所有关联关系"""
+    if not NEO4J_AVAILABLE:
+        return {"error": "Neo4j 驱动未安装"}
+
+    try:
+        neo4j = get_neo4j_service()
+        relations = neo4j.get_node_relations(node_name)
+        return {"node_name": node_name, "relations": relations}
+    except Exception as e:
+        return {"error": str(e)}

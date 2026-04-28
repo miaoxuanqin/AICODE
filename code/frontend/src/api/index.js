@@ -150,7 +150,22 @@ export const graphApi = {
   // 构建图谱
   buildGraph: (entities) => request.post('/graph/graph/build', entities),
   // Neo4j 状态
-  neo4jStatus: () => request.get('/graph/neo4j/status')
+  neo4jStatus: () => request.get('/graph/neo4j/status'),
+
+  // ============ 图谱浏览 API ============
+  // 图谱统计
+  explorerStats: () => request.get('/graph/explorer/stats'),
+  // 获取中心节点（采样）
+  centerNodes: (limit = 50) => request.get('/graph/explorer/center', { params: { limit } }),
+  // 获取节点邻居
+  neighbors: (nodeName, depth = 1) =>
+    request.get(`/graph/explorer/neighbors/${encodeURIComponent(nodeName)}`, { params: { depth } }),
+  // 搜索节点
+  searchNodes: (q, label = null, limit = 20) =>
+    request.get('/graph/explorer/search', { params: { q, label, limit } }),
+  // 获取节点关联关系
+  nodeRelations: (nodeName) =>
+    request.get(`/graph/explorer/node/${encodeURIComponent(nodeName)}/relations`)
 }
 
 export default request

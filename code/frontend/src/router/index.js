@@ -51,6 +51,12 @@ const routes = [
         meta: { title: '图谱增强问答', icon: 'Connection' }
       },
       {
+        path: 'knowledge/graph',
+        name: 'GraphExplorer',
+        component: () => import('@/views/graph/GraphExplorer.vue'),
+        meta: { title: '知识图谱', icon: 'Box' }
+      },
+      {
         path: 'qa/chat',
         name: 'QAChat',
         component: () => import('@/views/qa/QAChat.vue'),

@@ -700,6 +700,289 @@ class Neo4jService:
                     success_count += 1
         return success_count
 
+    # ==================== 图谱浏览功能 ====================
+
+    def get_graph_stats(self) -> Dict[str, Any]:
+        """获取图谱统计信息"""
+        # 节点统计
+        node_query = """
+        MATCH (n)
+        RETURN labels(n)[0] AS label, count(*) AS count
+        ORDER BY count DESC
+        """
+
+        # 边统计
+        rel_query = """
+        MATCH ()-[r]-()
+        RETURN type(r) AS label, count(*) AS count
+        """
+
+        # 总节点数
+        total_nodes_query = "MATCH (n) RETURN count(n) AS total"
+
+        # 总边数
+        total_edges_query = "MATCH ()-[r]-() RETURN count(r) AS total"
+
+        try:
+            with self.driver.session() as session:
+                node_result = session.run(node_query)
+                rel_result = session.run(rel_query)
+                total_nodes_result = session.run(total_nodes_query)
+                total_edges_result = session.run(total_edges_query)
+
+                by_type = {}
+                for record in node_result:
+                    label = record["label"] or "Unknown"
+                    by_type[label] = record["count"]
+
+                return {
+                    "total_nodes": total_nodes_result.single()["total"] if total_nodes_result.peek() else 0,
+                    "total_edges": total_edges_result.single()["total"] if total_edges_result.peek() else 0,
+                    "by_type": by_type
+                }
+        except Exception as e:
+            print(f"get_graph_stats 失败: {e}")
+            return {"total_nodes": 0, "total_edges": 0, "by_type": {}}
+
+    def get_center_nodes(self, limit: int = 50) -> Dict[str, Any]:
+        """
+        获取中心节点（按度数排序，用于初始采样展示）
+
+        Args:
+            limit: 返回节点数量
+
+        Returns:
+            包含 nodes 和 edges 的字典
+        """
+        # 先获取度数最高的节点
+        nodes_query = """
+        MATCH (n)
+        WHERE size((n)--())) > 0
+        WITH n, size((n)--()) AS degree
+        ORDER BY degree DESC
+        LIMIT $limit
+        RETURN n, degree
+        """
+
+        try:
+            with self.driver.session() as session:
+                nodes_result = session.run(nodes_query, limit=limit)
+
+                node_map = {}
+                nodes_list = []
+                for record in nodes_result:
+                    node = record["n"]
+                    node_id = str(node.id)
+                    node_data = {
+                        "id": node_id,
+                        "name": node.get("name", ""),
+                        "label": list(node.labels)[0] if node.labels else "",
+                        "degree": record["degree"]
+                    }
+                    nodes_list.append(node_data)
+                    node_map[node_id] = node_data
+
+                # 获取这些节点的所有边
+                if not node_map:
+                    return {"nodes": [], "edges": []}
+
+                edges_query = """
+                MATCH (a)-[r]-(b)
+                WHERE a.name IN $node_names AND b.name IN $node_names
+                RETURN a, b, type(r) AS rel_type, id(r) AS rel_id
+                """
+
+                node_names = [n["name"] for n in nodes_list]
+                edges_result = session.run(edges_query, node_names=node_names)
+
+                edges_list = []
+                for record in edges_result:
+                    source_node = record["a"]
+                    target_node = record["b"]
+                    edges_list.append({
+                        "id": str(record["rel_id"]),
+                        "source": str(source_node.id),
+                        "target": str(target_node.id),
+                        "type": record["rel_type"]
+                    })
+
+                return {"nodes": nodes_list, "edges": edges_list}
+        except Exception as e:
+            print(f"get_center_nodes 失败: {e}")
+            return {"nodes": [], "edges": []}
+
+    def get_neighbors(self, node_name: str, depth: int = 1) -> Dict[str, Any]:
+        """
+        获取节点的邻居节点
+
+        Args:
+            node_name: 节点名称
+            depth: 深度（1或2）
+
+        Returns:
+            包含 nodes 和 edges 的字典
+        """
+        if depth == 1:
+            query = """
+            MATCH (center)-[r]-(neighbor)
+            WHERE center.name = $node_name
+            RETURN center, r, neighbor
+            """
+        else:
+            query = """
+            MATCH path = (center)-[*1..2]-(neighbor)
+            WHERE center.name = $node_name
+            RETURN path
+            """
+
+        try:
+            with self.driver.session() as session:
+                if depth == 1:
+                    result = session.run(query, node_name=node_name)
+                    node_map = {}
+                    edges_list = []
+
+                    for record in result:
+                        center = record["center"]
+                        neighbor = record["neighbor"]
+                        rel = record["r"]
+
+                        center_id = str(center.id)
+                        if center_id not in node_map:
+                            node_map[center_id] = {
+                                "id": center_id,
+                                "name": center.get("name", ""),
+                                "label": list(center.labels)[0] if center.labels else ""
+                            }
+
+                        neighbor_id = str(neighbor.id)
+                        if neighbor_id not in node_map:
+                            node_map[neighbor_id] = {
+                                "id": neighbor_id,
+                                "name": neighbor.get("name", ""),
+                                "label": list(neighbor.labels)[0] if neighbor.labels else ""
+                            }
+
+                        edges_list.append({
+                            "id": str(rel.id),
+                            "source": center_id,
+                            "target": neighbor_id,
+                            "type": type(rel).__name__
+                        })
+
+                    return {"nodes": list(node_map.values()), "edges": edges_list}
+                else:
+                    result = session.run(query, node_name=node_name)
+                    node_map = {}
+                    edges_list = []
+
+                    for record in result:
+                        path = record["path"]
+                        for i, node in enumerate(path.nodes):
+                            node_id = str(node.id)
+                            if node_id not in node_map:
+                                node_map[node_id] = {
+                                    "id": node_id,
+                                    "name": node.get("name", ""),
+                                    "label": list(node.labels)[0] if node.labels else ""
+                                }
+                            if i > 0:
+                                rel = path.relationships[i - 1]
+                                edges_list.append({
+                                    "id": str(rel.id),
+                                    "source": str(path.nodes[i - 1].id),
+                                    "target": node_id,
+                                    "type": type(rel).__name__
+                                })
+
+                    return {"nodes": list(node_map.values()), "edges": edges_list}
+        except Exception as e:
+            print(f"get_neighbors 失败: {e}")
+            return {"nodes": [], "edges": []}
+
+    def search_nodes(self, keyword: str, label: str = None, limit: int = 20) -> List[Dict[str, Any]]:
+        """
+        搜索节点
+
+        Args:
+            keyword: 搜索关键词
+            label: 可选，按类型筛选
+            limit: 返回数量
+
+        Returns:
+            匹配的节点列表
+        """
+        if label:
+            query = f"""
+            MATCH (n:{label})
+            WHERE n.name CONTAINS $keyword
+            RETURN n, labels(n)[0] AS label
+            LIMIT $limit
+            """
+        else:
+            query = """
+            MATCH (n)
+            WHERE n.name CONTAINS $keyword
+            RETURN n, labels(n)[0] AS label
+            LIMIT $limit
+            """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, keyword=keyword, limit=limit)
+                return [
+                    {
+                        "id": str(record["n"].id),
+                        "name": record["n"].get("name", ""),
+                        "label": record["label"],
+                        "matched_on": "name"
+                    }
+                    for record in result
+                ]
+        except Exception as e:
+            print(f"search_nodes 失败: {e}")
+            return []
+
+    def get_node_relations(self, node_name: str) -> List[Dict[str, Any]]:
+        """
+        获取节点的所有关联关系
+
+        Args:
+            node_name: 节点名称
+
+        Returns:
+            关系列表，包含类型、方向、目标/源节点
+        """
+        query = """
+        MATCH (center)-[r]-(connected)
+        WHERE center.name = $node_name
+        RETURN r, connected, labels(center)[0] AS center_label, labels(connected)[0] AS connected_label,
+               startNode(r) = center AS is_outgoing
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, node_name=node_name)
+                relations = []
+                for record in result:
+                    rel = record["r"]
+                    connected = record["connected"]
+                    is_outgoing = record["is_outgoing"]
+
+                    relations.append({
+                        "id": str(rel.id),
+                        "type": type(rel).__name__,
+                        "direction": "outgoing" if is_outgoing else "incoming",
+                        "target_name": connected.get("name", "") if is_outgoing else record["center"].get("name", ""),
+                        "target_label": record["connected_label"] if is_outgoing else record["center_label"],
+                        "source_name": record["center"].get("name", "") if is_outgoing else connected.get("name", ""),
+                        "source_label": record["center_label"] if is_outgoing else record["connected_label"]
+                    })
+                return relations
+        except Exception as e:
+            print(f"get_node_relations 失败: {e}")
+            return []
+
 
 # 全局单例
 _neo4j_service: Optional[Neo4jService] = None

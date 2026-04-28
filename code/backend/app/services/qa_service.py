@@ -202,7 +202,8 @@ class QAService:
     # ============ 核心问答 ============
 
     def ask(self, question: str, user_id: Optional[str] = None,
-            session_id: Optional[str] = None, db: Session = None) -> Dict[str, Any]:
+            session_id: Optional[str] = None, db: Session = None,
+            is_admin: bool = False) -> Dict[str, Any]:
         """
         处理问答（支持多轮对话）
 
@@ -211,6 +212,7 @@ class QAService:
             user_id: 用户ID
             session_id: 会话ID（可选，为空则不关联会话）
             db: 数据库会话
+            is_admin: 是否管理员（管理员可查看所有知识）
 
         Returns:
             包含 answer, cards, related_questions, session_id 的字典
@@ -262,7 +264,8 @@ class QAService:
             knowledge_ids = self.search_service.search_vector(
                 query_vector=query_vector,
                 user_id=user_id,
-                limit=search_size
+                limit=search_size,
+                is_admin=is_admin
             )
             # 根据 ID 获取完整知识信息
             items = []
@@ -284,7 +287,8 @@ class QAService:
                 query=question,
                 user_id=user_id,
                 page=1,
-                page_size=search_size
+                page_size=search_size,
+                is_admin=is_admin
             )
 
         # 2. 构建 Prompt（带历史和类别）

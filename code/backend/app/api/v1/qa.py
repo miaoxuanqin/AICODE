@@ -117,7 +117,8 @@ async def chat(
         question=request.question,
         user_id=request.user_id or str(current_user.id),
         session_id=request.session_id,
-        db=db
+        db=db,
+        is_admin=current_user.is_superuser == 1
     )
     return result
 

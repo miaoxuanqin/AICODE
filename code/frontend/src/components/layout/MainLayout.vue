@@ -23,6 +23,10 @@
             <el-icon><Search /></el-icon>
             <span>知识搜索</span>
           </el-menu-item>
+          <el-menu-item index="/knowledge/graph">
+            <el-icon><Box /></el-icon>
+            <span>知识图谱</span>
+          </el-menu-item>
           <el-menu-item index="/knowledge/manage">
             <el-icon><Folder /></el-icon>
             <span>知识管理</span>

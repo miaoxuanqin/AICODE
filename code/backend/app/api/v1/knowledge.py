@@ -291,7 +291,12 @@ def list_knowledge(
     db: Session = Depends(get_db)
 ):
     """获取知识列表"""
-    query = db.query(Knowledge).filter(Knowledge.user_id == str(current_user.id))
+    is_admin = current_user.is_superuser == 1
+
+    if is_admin:
+        query = db.query(Knowledge)
+    else:
+        query = db.query(Knowledge).filter(Knowledge.user_id == str(current_user.id))
 
     if category:
         query = query.filter(Knowledge.category == category)
@@ -346,6 +351,7 @@ def search_knowledge(
 ):
     """搜索知识"""
     user_id = str(current_user.id)
+    is_admin = current_user.is_superuser == 1
 
     if search_type == "vector":
         # 向量搜索
@@ -356,7 +362,8 @@ def search_knowledge(
                 query_vector=query_vector,
                 user_id=user_id,
                 category=category,
-                limit=page_size
+                limit=page_size,
+                is_admin=is_admin
             )
             # 从 ES 获取详情
             items = []
@@ -384,7 +391,7 @@ def search_knowledge(
             print(f"向量搜索失败，fallback到关键词搜索: {e}")
             result = search_service.search_keyword(
                 query=q, user_id=user_id, category=category,
-                page=page, page_size=page_size
+                page=page, page_size=page_size, is_admin=is_admin
             )
     elif search_type == "hybrid":
         # 混合搜索：同时返回关键词和向量结果，去重合并
@@ -397,13 +404,14 @@ def search_knowledge(
                 query_vector=query_vector,
                 user_id=user_id,
                 category=category,
-                limit=page_size
+                limit=page_size,
+                is_admin=is_admin
             )
 
             # 关键词搜索
             keyword_result = search_service.search_keyword(
                 query=q, user_id=user_id, category=category,
-                page=1, page_size=page_size
+                page=1, page_size=page_size, is_admin=is_admin
             )
 
             # 合并结果，向量结果优先
@@ -442,7 +450,7 @@ def search_knowledge(
             print(f"混合搜索失败，fallback到关键词搜索: {e}")
             result = search_service.search_keyword(
                 query=q, user_id=user_id, category=category,
-                page=page, page_size=page_size
+                page=page, page_size=page_size, is_admin=is_admin
             )
     else:
         # 关键词搜索（默认）
@@ -451,7 +459,8 @@ def search_knowledge(
             user_id=user_id,
             category=category,
             page=page,
-            page_size=page_size
+            page_size=page_size,
+            is_admin=is_admin
         )
 
     # 补充分类名称
@@ -475,10 +484,12 @@ def suggest_knowledge(
     current_user: User = Depends(get_current_user)
 ):
     """搜索建议"""
+    is_admin = current_user.is_superuser == 1
     return search_service.suggest(
         query=q,
         user_id=str(current_user.id),
-        limit=limit
+        limit=limit,
+        is_admin=is_admin
     )
 
 
@@ -502,9 +513,11 @@ def get_hot_knowledge(
     current_user: User = Depends(get_current_user)
 ):
     """获取热门知识"""
+    is_admin = current_user.is_superuser == 1
     return search_service.get_hot_knowledge(
         user_id=str(current_user.id),
-        limit=limit
+        limit=limit,
+        is_admin=is_admin
     )
 
 
@@ -514,9 +527,11 @@ def get_latest_knowledge(
     current_user: User = Depends(get_current_user)
 ):
     """获取最新知识"""
+    is_admin = current_user.is_superuser == 1
     return search_service.get_latest_knowledge(
         user_id=str(current_user.id),
-        limit=limit
+        limit=limit,
+        is_admin=is_admin
     )
 
 
@@ -527,10 +542,15 @@ def get_knowledge_detail(
     db: Session = Depends(get_db)
 ):
     """获取知识详情"""
-    knowledge = db.query(Knowledge).filter(
-        Knowledge.id == knowledge_id,
-        Knowledge.user_id == str(current_user.id)
-    ).first()
+    is_admin = current_user.is_superuser == 1
+
+    if is_admin:
+        knowledge = db.query(Knowledge).filter(Knowledge.id == knowledge_id).first()
+    else:
+        knowledge = db.query(Knowledge).filter(
+            Knowledge.id == knowledge_id,
+            Knowledge.user_id == str(current_user.id)
+        ).first()
 
     if not knowledge:
         raise HTTPException(status_code=404, detail="知识不存在")
@@ -669,10 +689,15 @@ def favorite_knowledge(
     db: Session = Depends(get_db)
 ):
     """收藏知识"""
-    knowledge = db.query(Knowledge).filter(
-        Knowledge.id == knowledge_id,
-        Knowledge.user_id == str(current_user.id)
-    ).first()
+    is_admin = current_user.is_superuser == 1
+
+    if is_admin:
+        knowledge = db.query(Knowledge).filter(Knowledge.id == knowledge_id).first()
+    else:
+        knowledge = db.query(Knowledge).filter(
+            Knowledge.id == knowledge_id,
+            Knowledge.user_id == str(current_user.id)
+        ).first()
 
     if not knowledge:
         raise HTTPException(status_code=404, detail="知识不存在")
@@ -754,10 +779,15 @@ def create_comment(
     db: Session = Depends(get_db)
 ):
     """添加评论"""
-    knowledge = db.query(Knowledge).filter(
-        Knowledge.id == knowledge_id,
-        Knowledge.user_id == str(current_user.id)
-    ).first()
+    is_admin = current_user.is_superuser == 1
+
+    if is_admin:
+        knowledge = db.query(Knowledge).filter(Knowledge.id == knowledge_id).first()
+    else:
+        knowledge = db.query(Knowledge).filter(
+            Knowledge.id == knowledge_id,
+            Knowledge.user_id == str(current_user.id)
+        ).first()
 
     if not knowledge:
         raise HTTPException(status_code=404, detail="知识不存在")

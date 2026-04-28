@@ -104,20 +104,21 @@ class SearchService:
             return None
 
     def search_keyword(self, query: str, user_id: str, category: Optional[str] = None,
-                       page: int = 1, page_size: int = 20) -> Dict[str, Any]:
+                       page: int = 1, page_size: int = 20, is_admin: bool = False) -> Dict[str, Any]:
         """关键词搜索（ES）"""
         self.ensure_es_index()
 
-        must_conditions = [
-            {"term": {"user_id": user_id}},
-            {
-                "multi_match": {
-                    "query": query,
-                    "fields": ["title^3", "content", "summary^2"],
-                    "type": "best_fields"
-                }
+        must_conditions = []
+        if not is_admin:
+            must_conditions.append({"term": {"user_id": user_id}})
+
+        must_conditions.append({
+            "multi_match": {
+                "query": query,
+                "fields": ["title^3", "content", "summary^2"],
+                "type": "best_fields"
             }
-        ]
+        })
 
         if category:
             must_conditions.append({"term": {"category": category}})
@@ -171,23 +172,28 @@ class SearchService:
         }
 
     def search_hybrid(self, query: str, user_id: str, category: Optional[str] = None,
-                      page: int = 1, page_size: int = 20) -> Dict[str, Any]:
+                      page: int = 1, page_size: int = 20, is_admin: bool = False) -> Dict[str, Any]:
         """混合搜索：暂定直接走关键词搜索"""
-        return self.search_keyword(query, user_id, category, page, page_size)
+        return self.search_keyword(query, user_id, category, page, page_size, is_admin)
 
     def search_vector(self, query_vector: List[float], user_id: str,
-                     category: Optional[str] = None, limit: int = 5) -> List[str]:
+                     category: Optional[str] = None, limit: int = 5, is_admin: bool = False) -> List[str]:
         """向量搜索（Qdrant），返回去重后的知识ID列表"""
         collection_name = "knowledge"
 
         try:
             # 构建过滤条件
             from qdrant_client.models import Filter, FieldCondition, MatchValue
-            must_conditions = [FieldCondition(key="user_id", match=MatchValue(value=user_id))]
+            must_conditions = []
+            if not is_admin:
+                must_conditions.append(FieldCondition(key="user_id", match=MatchValue(value=user_id)))
             if category:
                 must_conditions.append(FieldCondition(key="category", match=MatchValue(value=category)))
 
-            search_filter = Filter(must=must_conditions)
+            if must_conditions:
+                search_filter = Filter(must=must_conditions)
+            else:
+                search_filter = None
 
             # 扩大搜索范围，因为每个知识现在有多个 chunk
             search_limit = limit * 3
@@ -320,17 +326,24 @@ class SearchService:
 
         return chunks
 
-    def get_hot_knowledge(self, user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_hot_knowledge(self, user_id: str, limit: int = 10, is_admin: bool = False) -> List[Dict[str, Any]]:
         """获取热门知识"""
         self.ensure_es_index()
 
-        body = {
-            "query": {
-                "term": {"user_id": user_id}
-            },
-            "sort": [{"view_count": "desc"}],
-            "size": limit
-        }
+        if is_admin:
+            body = {
+                "query": {"match_all": {}},
+                "sort": [{"view_count": "desc"}],
+                "size": limit
+            }
+        else:
+            body = {
+                "query": {
+                    "term": {"user_id": user_id}
+                },
+                "sort": [{"view_count": "desc"}],
+                "size": limit
+            }
 
         result = self.es.search(index=self.INDEX_NAME, body=body)
         return [
@@ -343,17 +356,24 @@ class SearchService:
             for hit in result["hits"]["hits"]
         ]
 
-    def get_latest_knowledge(self, user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_latest_knowledge(self, user_id: str, limit: int = 10, is_admin: bool = False) -> List[Dict[str, Any]]:
         """获取最新知识"""
         self.ensure_es_index()
 
-        body = {
-            "query": {
-                "term": {"user_id": user_id}
-            },
-            "sort": [{"created_at": "desc"}],
-            "size": limit
-        }
+        if is_admin:
+            body = {
+                "query": {"match_all": {}},
+                "sort": [{"created_at": "desc"}],
+                "size": limit
+            }
+        else:
+            body = {
+                "query": {
+                    "term": {"user_id": user_id}
+                },
+                "sort": [{"created_at": "desc"}],
+                "size": limit
+            }
 
         result = self.es.search(index=self.INDEX_NAME, body=body)
         return [
@@ -366,29 +386,49 @@ class SearchService:
             for hit in result["hits"]["hits"]
         ]
 
-    def suggest(self, query: str, user_id: str, limit: int = 10) -> List[Dict[str, Any]]:
+    def suggest(self, query: str, user_id: str, limit: int = 10, is_admin: bool = False) -> List[Dict[str, Any]]:
         """搜索建议/自动补全"""
         self.ensure_es_index()
 
-        body = {
-            "query": {
-                "bool": {
-                    "must": [
-                        {"term": {"user_id": user_id}},
-                        {
-                            "match_phrase_prefix": {
-                                "title": {
-                                    "query": query,
-                                    "max_expansions": 10
+        if is_admin:
+            body = {
+                "query": {
+                    "bool": {
+                        "must": [
+                            {
+                                "match_phrase_prefix": {
+                                    "title": {
+                                        "query": query,
+                                        "max_expansions": 10
+                                    }
                                 }
                             }
-                        }
-                    ]
-                }
-            },
-            "size": limit,
-            "_source": ["title"]
-        }
+                        ]
+                    }
+                },
+                "size": limit,
+                "_source": ["title"]
+            }
+        else:
+            body = {
+                "query": {
+                    "bool": {
+                        "must": [
+                            {"term": {"user_id": user_id}},
+                            {
+                                "match_phrase_prefix": {
+                                    "title": {
+                                        "query": query,
+                                        "max_expansions": 10
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                },
+                "size": limit,
+                "_source": ["title"]
+            }
 
         result = self.es.search(index=self.INDEX_NAME, body=body)
         return [{"text": hit["_source"]["title"]} for hit in result["hits"]["hits"]]
