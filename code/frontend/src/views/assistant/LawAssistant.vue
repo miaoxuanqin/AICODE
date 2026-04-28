@@ -85,8 +85,50 @@
                     <span class="sender-name">执法助手</span>
                   </div>
                   <div class="message-body thinking">
-                    <el-icon class="is-loading"><Loading /></el-icon>
-                    <span>正在检索知识库并生成回答，请稍候...</span>
+                    <!-- 进度条 -->
+                    <div class="thinking-progress">
+                      <div class="progress-bar">
+                        <div class="progress-fill" :style="{ width: thinkingProgress + '%' }"></div>
+                      </div>
+                      <span class="progress-text">{{ thinkingProgress }}%</span>
+                    </div>
+
+                    <!-- 步骤列表 -->
+                    <div class="thinking-steps">
+                      <div
+                        v-for="(step, idx) in thinkingSteps"
+                        :key="idx"
+                        class="thinking-step"
+                        :class="{
+                          active: thinkingCurrent === idx,
+                          completed: thinkingCurrent > idx
+                        }"
+                      >
+                        <div class="thinking-icon">
+                          <el-icon v-if="thinkingCurrent > idx" class="check-icon"><Select /></el-icon>
+                          <el-icon v-else-if="thinkingCurrent === idx" class="loading-icon"><Loading /></el-icon>
+                          <el-icon v-else class="waiting-icon"><More /></el-icon>
+                        </div>
+                        <div class="step-info">
+                          <span class="step-name">{{ step.name }}</span>
+                          <span class="step-detail" v-if="thinkingCurrent === idx && step.detail">{{ step.detail }}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 趣味提示 -->
+                    <div class="fun-tip" v-if="thinkingCurrent < thinkingSteps.length">
+                      <el-icon><Sunrise /></el-icon>
+                      <span>{{ funTips[currentTipIndex] }}</span>
+                    </div>
+
+                    <!-- 取消按钮 -->
+                    <div class="cancel-tip" v-if="thinkingProgress > 15 && thinkingProgress < 100">
+                      <el-button size="small" @click="cancelRequest">
+                        <el-icon><Close /></el-icon>
+                        取消
+                      </el-button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -198,7 +240,7 @@ import { ref, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Delete, Service, Upload, Promotion, Loading,
-  FolderOpened, User, Star
+  FolderOpened, User, Star, Select, More, Sunrise
 } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import { qaApi, knowledgeApi } from '@/api'
@@ -214,6 +256,34 @@ const inputMessage = ref('')
 const isThinking = ref(false)
 const messages = ref([])
 const chatMessagesRef = ref(null)
+
+// 思考动画相关
+const thinkingCurrent = ref(-1)
+const thinkingProgress = ref(0)
+const currentTipIndex = ref(0)
+
+// 当前请求的取消函数
+let cancelRequestRef = null
+
+// 思考步骤
+const thinkingSteps = [
+  { name: '理解问题', detail: '正在分析执法场景的关键要素...' },
+  { name: '法规检索', detail: '正在搜索适用的法律法规...' },
+  { name: '案例匹配', detail: '正在查找类似执法案例...' },
+  { name: '方案生成', detail: '正在生成处置建议...' }
+]
+
+// 趣味提示
+const funTips = [
+  '正在调用法律知识库...',
+  '正在检索相关法规条款...',
+  '正在匹配类似案例...',
+  '执法依据分析中...',
+  '正在生成专业建议...',
+  '答案马上就好～',
+  '专业知识整合中...',
+  '处置方案生成ing...'
+]
 
 // 会话管理
 const currentSessionId = ref(null)
@@ -336,6 +406,45 @@ const scrollToBottom = () => {
   })
 }
 
+// 思考动画
+let thinkingTimer = null
+
+const startThinkingAnimation = () => {
+  thinkingCurrent.value = -1
+  thinkingProgress.value = 0
+  currentTipIndex.value = 0
+
+  let progress = 0
+  thinkingTimer = setInterval(() => {
+    progress += Math.random() * 12 + 5
+    if (progress > 100) progress = 100
+    thinkingProgress.value = Math.round(progress)
+
+    // 更新当前步骤
+    const totalSteps = thinkingSteps.length
+    const stepThreshold = 100 / totalSteps
+    thinkingCurrent.value = Math.min(Math.floor(progress / stepThreshold), totalSteps - 1)
+
+    // 轮换趣味提示
+    if (Math.random() < 0.25) {
+      currentTipIndex.value = (currentTipIndex.value + 1) % funTips.length
+    }
+
+    if (progress >= 100) {
+      clearInterval(thinkingTimer)
+    }
+  }, 250)
+}
+
+const stopThinkingAnimation = () => {
+  thinkingCurrent.value = -1
+  thinkingProgress.value = 100
+  if (thinkingTimer) {
+    clearInterval(thinkingTimer)
+    thinkingTimer = null
+  }
+}
+
 const selectScene = (scene) => {
   inputMessage.value = `【${scene.name}】请推荐处置方案`
 }
@@ -357,11 +466,23 @@ const handleSend = async () => {
   inputMessage.value = ''
   isThinking.value = true
 
+  // 启动思考动画
+  startThinkingAnimation()
+
+  // 创建取消控制器
+  let canceled = false
+  cancelRequestRef = () => {
+    canceled = true
+    cancelRequestRef = null
+  }
+
   scrollToBottom()
 
   try {
     const userId = cachedUserId || await ensureUserId()
     const result = await qaApi.chat(userMsg.content, userId, currentSessionId.value)
+
+    if (canceled) return
 
     const aiMsg = {
       role: 'assistant',
@@ -382,13 +503,32 @@ const handleSend = async () => {
       loadRecentCases()
     ])
   } catch (error) {
-    ElMessage.error('问答服务出错，请稍后重试')
-    console.error('QA error:', error)
+    if (!canceled) {
+      ElMessage.error('问答服务出错，请稍后重试')
+      console.error('QA error:', error)
+    }
   } finally {
     isThinking.value = false
+    stopThinkingAnimation()
+    cancelRequestRef = null
   }
 
   scrollToBottom()
+}
+
+// 取消当前请求
+const cancelRequest = () => {
+  if (cancelRequestRef) {
+    cancelRequestRef()
+    isThinking.value = false
+    stopThinkingAnimation()
+    // 移除最后一条用户消息
+    const lastMsg = messages.value[messages.value.length - 1]
+    if (lastMsg && lastMsg.role === 'user') {
+      messages.value.pop()
+    }
+    ElMessage.info('已取消')
+  }
 }
 
 const viewCard = (card) => {
@@ -511,14 +651,144 @@ onMounted(async () => {
 
 .thinking {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #909399;
+  flex-direction: column;
+  gap: 16px;
   padding: 8px 0;
 }
 
 .thinking .el-icon {
   font-size: 18px;
+}
+
+.thinking-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 6px;
+  background: #e4e7ed;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f56c6c 0%, #e6a23c 100%);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #f56c6c;
+  font-weight: 600;
+  min-width: 40px;
+}
+
+.thinking-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.thinking-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #f5f7fa;
+  color: #909399;
+  font-size: 14px;
+  transition: all 0.3s ease;
+}
+
+.thinking-step.active {
+  background: linear-gradient(135deg, rgba(245, 108, 108, 0.1) 0%, rgba(230, 162, 60, 0.1) 100%);
+  color: #f56c6c;
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(245, 108, 108, 0.2);
+}
+
+.thinking-step.completed {
+  background: #f0f9f0;
+  color: #67c23a;
+}
+
+.thinking-icon {
+  width: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.check-icon {
+  color: #67c23a;
+}
+
+.loading-icon {
+  color: #f56c6c;
+  animation: rotate 1s linear infinite;
+}
+
+.waiting-icon {
+  color: #c0c4cc;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.step-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.step-name {
+  font-weight: 500;
+}
+
+.step-detail {
+  font-size: 12px;
+  color: #909399;
+  font-weight: normal;
+}
+
+.thinking-step.active .step-detail {
+  color: #f56c6c;
+  opacity: 0.8;
+}
+
+.fun-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #c0c4cc;
+  padding: 8px 12px;
+  background: #fdf6ec;
+  border-radius: 6px;
+  animation: fadeIn 0.5s ease;
+}
+
+.fun-tip .el-icon {
+  color: #e6a23c;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.cancel-tip {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
 }
 
 .chat-message {

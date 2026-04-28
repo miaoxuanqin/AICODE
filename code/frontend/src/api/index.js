@@ -14,6 +14,12 @@ request.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
+    // 支持 AbortController signal
+    if (config.signal) {
+      config.cancelToken = new axios.CancelToken((cancel) => {
+        config._cancel = cancel
+      })
+    }
     return config
   },
   error => {

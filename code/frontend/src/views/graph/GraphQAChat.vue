@@ -304,6 +304,14 @@
                       <el-icon><Sunrise /></el-icon>
                       <span>{{ funTips[currentTipIndex] }}</span>
                     </div>
+
+                    <!-- 取消按钮 -->
+                    <div class="cancel-tip" v-if="thinkingProgress > 15 && thinkingProgress < 100">
+                      <el-button size="small" @click="cancelRequest">
+                        <el-icon><Close /></el-icon>
+                        取消
+                      </el-button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -597,6 +605,7 @@ const thinkingProgress = ref(0)
 const liveReasoningChain = ref([])
 const currentTipIndex = ref(0)
 let tipRotateTimer = null
+let cancelRequestRef = null
 
 // 配置 marked
 marked.setOptions({
@@ -991,6 +1000,13 @@ const handleSend = async () => {
   thinkingProgress.value = 0
   liveReasoningChain.value = []
 
+  // 创建取消控制器
+  let canceled = false
+  cancelRequestRef = () => {
+    canceled = true
+    cancelRequestRef = null
+  }
+
   // 启动进度动画
   const progressTimer = startThinkingAnimation()
 
@@ -998,6 +1014,8 @@ const handleSend = async () => {
 
   try {
     const result = await graphApi.qa(userMsg.content, true)
+
+    if (canceled) return
 
     // 停止进度动画
     clearInterval(progressTimer)
@@ -1046,6 +1064,7 @@ const handleSend = async () => {
 
     isThinking.value = false
     thinkingCurrent.value = -1
+    cancelRequestRef = null
 
     const aiMsg = {
       role: 'assistant',
@@ -1057,6 +1076,7 @@ const handleSend = async () => {
     messages.value.push(aiMsg)
 
   } catch (error) {
+    if (canceled) return
     console.error('图谱问答失败:', error)
     clearInterval(progressTimer)
     graphPhase.value = ''
@@ -1064,6 +1084,7 @@ const handleSend = async () => {
     graphData.edges = finalEdges
     isThinking.value = false
     thinkingCurrent.value = -1
+    cancelRequestRef = null
     ElMessage.error('问答服务出错，请稍后重试')
 
     // 保留用户消息，显示错误提示
@@ -1094,6 +1115,21 @@ const scrollToBottom = () => {
       behavior: 'smooth'
     })
   })
+}
+
+// 取消当前请求
+const cancelRequest = () => {
+  if (cancelRequestRef) {
+    cancelRequestRef()
+    isThinking.value = false
+    thinkingCurrent.value = -1
+    // 移除最后一条用户消息
+    const lastMsg = messages.value[messages.value.length - 1]
+    if (lastMsg && lastMsg.role === 'user') {
+      messages.value.pop()
+    }
+    ElMessage.info('已取消')
+  }
 }
 
 onMounted(() => {
@@ -1564,6 +1600,12 @@ watch(() => graphData.edges.length, (newLen) => {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-5px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+.cancel-tip {
+  display: flex;
+  justify-content: center;
+  margin-top: 8px;
 }
 
 .thinking-mode {
