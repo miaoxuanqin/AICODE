@@ -137,7 +137,8 @@ export const qaApi = {
 // ============ 图谱问答 API ============
 export const graphApi = {
   // 图谱增强问答
-  qa: (question) => request.post('/graph/qa', { question }),
+  qa: (question, useNeo4j = false) =>
+    request.post('/graph/qa', { question, use_neo4j: useNeo4j }),
   // 提取实体
   extractEntities: (text) => request.get('/graph/entity/extract', { params: { q: text } }),
   // 构建图谱

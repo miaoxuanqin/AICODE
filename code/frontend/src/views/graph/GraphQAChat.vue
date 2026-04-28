@@ -14,6 +14,11 @@
               <span>问答过程</span>
               <div class="header-actions">
                 <el-switch
+                  v-model="useNeo4j"
+                  active-text="使用Neo4j"
+                  inactive-text=""
+                />
+                <el-switch
                   v-model="showReasoning"
                   active-text="显示推理过程"
                   inactive-text=""
@@ -186,17 +191,98 @@
                 <div class="message-content">
                   <div class="message-header">
                     <span class="sender-name">图谱助手</span>
+                    <span class="thinking-mode" v-if="useNeo4j">
+                      <el-tag size="small" type="warning">Neo4j 推理</el-tag>
+                    </span>
                   </div>
-                  <div class="message-body thinking">
-                    <div class="thinking-steps">
-                      <div class="thinking-step" v-for="(step, idx) in thinkingSteps" :key="idx" :class="{ active: thinkingCurrent >= idx }">
-                        <div class="thinking-icon">
-                          <el-icon v-if="thinkingCurrent > idx"><Check /></el-icon>
-                          <el-icon v-else-if="thinkingCurrent === idx" class="is-loading"><Loading /></el-icon>
-                          <el-icon v-else><Clock /></el-icon>
+
+                  <!-- 推理过程 (实时展示) -->
+                  <div class="reasoning-section thinking-reasoning" v-if="liveReasoningChain.length > 0">
+                    <div class="reasoning-title">
+                      <el-icon><Cpu /></el-icon>
+                      <span>推理进行中</span>
+                      <span class="reasoning-progress-text">{{ thinkingProgress }}%</span>
+                    </div>
+                    <div class="reasoning-steps">
+                      <div
+                        v-for="(step, stepIdx) in liveReasoningChain"
+                        :key="stepIdx"
+                        class="reasoning-step"
+                        :class="{
+                          'is-active': stepIdx === liveReasoningChain.length - 1,
+                          'is-done': stepIdx < liveReasoningChain.length - 1
+                        }"
+                      >
+                        <div class="step-indicator">
+                          <div v-if="stepIdx < liveReasoningChain.length - 1" class="step-check">
+                            <el-icon><Check /></el-icon>
+                          </div>
+                          <div v-else class="step-loading">
+                            <el-icon class="is-loading"><Loading /></el-icon>
+                          </div>
                         </div>
-                        <span>{{ step }}</span>
+                        <div class="step-content">
+                          <div class="step-query">{{ step.query }}</div>
+                          <div class="step-result" :class="{ 'is-calculating': stepIdx === liveReasoningChain.length - 1 }">
+                            <template v-if="stepIdx === liveReasoningChain.length - 1">
+                              <span class="calc-dots">正在分析</span>
+                            </template>
+                            <template v-else>
+                              {{ step.result }}
+                            </template>
+                          </div>
+                          <div v-if="step.entities?.length" class="step-entities">
+                            <el-tag
+                              v-for="entity in step.entities"
+                              :key="entity"
+                              size="small"
+                              type="info"
+                            >
+                              {{ entity }}
+                            </el-tag>
+                          </div>
+                        </div>
+                        <div v-if="stepIdx < liveReasoningChain.length - 1" class="step-connector"></div>
                       </div>
+                    </div>
+                  </div>
+
+                  <!-- 进度条 -->
+                  <div class="message-body thinking" v-else>
+                    <div class="thinking-progress">
+                      <div class="progress-bar">
+                        <div class="progress-fill" :style="{ width: thinkingProgress + '%' }"></div>
+                      </div>
+                      <span class="progress-text">{{ thinkingProgress }}%</span>
+                    </div>
+
+                    <!-- 步骤列表 -->
+                    <div class="thinking-steps">
+                      <div
+                        v-for="(step, idx) in thinkingSteps"
+                        :key="idx"
+                        class="thinking-step"
+                        :class="{
+                          active: thinkingCurrent === idx,
+                          completed: thinkingCurrent > idx
+                        }"
+                      >
+                        <div class="thinking-icon">
+                          <el-icon v-if="thinkingCurrent > idx" class="check-icon"><Select /></el-icon>
+                          <el-icon v-else-if="thinkingCurrent === idx" class="loading-icon"><Loading /></el-icon>
+                          <el-icon v-else class="waiting-icon"><More /></el-icon>
+                        </div>
+                        <div class="step-info">
+                          <span class="step-name">{{ step.name }}</span>
+                          <span class="step-detail" v-if="thinkingCurrent === idx && step.detail">{{ step.detail }}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- 趣味提示 -->
+                    <div class="fun-tip" v-if="thinkingCurrent < thinkingSteps.length">
+                      <el-icon><Sunrise /></el-icon>
+                      <span>{{ funTips[currentTipIndex] }}</span>
                     </div>
                   </div>
                 </div>
@@ -255,68 +341,72 @@
 
               <!-- 边 -->
               <g class="edges">
-                <g v-for="edge in graphData.edges" :key="edge.id">
-                  <path
-                    :d="getEdgePath(edge)"
-                    :stroke="highlightedEdges.includes(edge.id) ? '#409eff' : '#dcdfe6'"
-                    :stroke-width="highlightedEdges.includes(edge.id) ? 3 : 2"
-                    fill="none"
-                    :marker-end="highlightedEdges.includes(edge.id) ? 'url(#arrowhead-active)' : 'url(#arrowhead)'"
-                    class="edge-path"
-                    @mouseenter="highlightEdge(edge)"
-                    @mouseleave="unhighlightEdge"
-                  />
-                  <text
-                    :x="(graphData.nodes.find(n => n.id === edge.source)?.x + graphData.nodes.find(n => n.id === edge.target)?.x) / 2"
-                    :y="(graphData.nodes.find(n => n.id === edge.source)?.y + graphData.nodes.find(n => n.id === edge.target)?.y) / 2 - 8"
-                    text-anchor="middle"
-                    class="edge-label"
-                    :fill="highlightedEdges.includes(edge.id) ? '#409eff' : '#909399'"
-                  >
-                    {{ edge.label }}
-                  </text>
-                </g>
+                <transition-group name="edge-fade">
+                  <g v-for="edge in graphData.edges" :key="edge.id">
+                    <path
+                      :d="getEdgePath(edge)"
+                      :stroke="highlightedEdges.includes(edge.id) ? '#409eff' : '#dcdfe6'"
+                      :stroke-width="highlightedEdges.includes(edge.id) ? 3 : 2"
+                      fill="none"
+                      :marker-end="highlightedEdges.includes(edge.id) ? 'url(#arrowhead-active)' : 'url(#arrowhead)'"
+                      class="edge-path"
+                      @mouseenter="highlightEdge(edge)"
+                      @mouseleave="unhighlightEdge"
+                    />
+                    <text
+                      :x="(graphData.nodes.find(n => n.id === edge.source)?.x + graphData.nodes.find(n => n.id === edge.target)?.x) / 2"
+                      :y="(graphData.nodes.find(n => n.id === edge.source)?.y + graphData.nodes.find(n => n.id === edge.target)?.y) / 2 - 8"
+                      text-anchor="middle"
+                      class="edge-label"
+                      :fill="highlightedEdges.includes(edge.id) ? '#409eff' : '#909399'"
+                    >
+                      {{ edge.label }}
+                    </text>
+                  </g>
+                </transition-group>
               </g>
 
               <!-- 节点 -->
               <g class="nodes">
-                <g
-                  v-for="node in graphData.nodes"
-                  :key="node.id"
-                  :transform="`translate(${node.x}, ${node.y})`"
-                  class="node-group"
-                  @click="selectNode(node)"
-                  @mouseenter="hoverNode(node.id)"
-                  @mouseleave="unhoverNode"
-                >
-                  <!-- 节点背景 -->
-                  <circle
-                    :r="selectedNode?.id === node.id ? 40 : (hoveredNodeId === node.id ? 38 : 35)"
-                    :fill="getNodeColor(node.type)"
-                    :stroke="selectedNode?.id === node.id || highlightedNodes.includes(node.id) ? '#409eff' : 'transparent'"
-                    :stroke-width="3"
-                    class="node-circle"
-                  />
-                  <!-- 节点图标 -->
-                  <text
-                    y="-5"
-                    text-anchor="middle"
-                    fill="#fff"
-                    font-size="16"
+                <transition-group name="node-fade">
+                  <g
+                    v-for="node in graphData.nodes"
+                    :key="node.id"
+                    :transform="`translate(${node.x}, ${node.y})`"
+                    class="node-group"
+                    @click="selectNode(node)"
+                    @mouseenter="hoverNode(node.id)"
+                    @mouseleave="unhoverNode"
                   >
-                    {{ getNodeIcon(node.type) }}
-                  </text>
-                  <!-- 节点标签 -->
-                  <text
-                    y="50"
-                    text-anchor="middle"
-                    :fill="selectedNode?.id === node.id || hoveredNodeId === node.id ? '#303133' : '#606266'"
-                    font-size="12"
-                    font-weight="500"
-                  >
-                    {{ node.label.length > 8 ? node.label.slice(0, 8) + '...' : node.label }}
-                  </text>
-                </g>
+                    <!-- 节点背景 -->
+                    <circle
+                      :r="selectedNode?.id === node.id ? 40 : (hoveredNodeId === node.id ? 38 : 35)"
+                      :fill="getNodeColor(node.type)"
+                      :stroke="selectedNode?.id === node.id || highlightedNodes.includes(node.id) ? '#409eff' : 'transparent'"
+                      :stroke-width="3"
+                      class="node-circle"
+                    />
+                    <!-- 节点图标 -->
+                    <text
+                      y="-5"
+                      text-anchor="middle"
+                      fill="#fff"
+                      font-size="16"
+                    >
+                      {{ getNodeIcon(node.type) }}
+                    </text>
+                    <!-- 节点标签 -->
+                    <text
+                      y="50"
+                      text-anchor="middle"
+                      :fill="selectedNode?.id === node.id || hoveredNodeId === node.id ? '#303133' : '#606266'"
+                      font-size="12"
+                      font-weight="500"
+                    >
+                      {{ node.label.length > 8 ? node.label.slice(0, 8) + '...' : node.label }}
+                    </text>
+                  </g>
+                </transition-group>
               </g>
             </svg>
 
@@ -397,7 +487,7 @@ import { ref, reactive, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   Delete, Promotion, Connection, Cpu, ArrowRight, Document, View,
-  FullScreen, Refresh, Loading, Clock, Check, Close
+  FullScreen, Refresh, Loading, Clock, Check, Close, Select, More, Sunrise
 } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import { graphApi } from '@/api'
@@ -407,6 +497,7 @@ const isThinking = ref(false)
 const messages = ref([])
 const chatMessagesRef = ref(null)
 const showReasoning = ref(true)
+const useNeo4j = ref(false)
 const expandedSteps = ref([])
 const selectedNode = ref(null)
 const hoveredNodeId = ref(null)
@@ -425,13 +516,30 @@ const exampleQuestions = [
   '建设工程竣工验收流程是什么？'
 ]
 
+// 增强的思考步骤 - 更详细的描述
 const thinkingSteps = [
-  '理解问题',
-  '检索知识',
-  '多跳推理',
-  '生成回答'
+  { name: '理解问题', detail: '正在分析问题的关键实体和语义...' },
+  { name: '知识检索', detail: '正在搜索相关的法规、案例和文件...' },
+  { name: '图谱推理', detail: '正在构建实体间的关联关系...' },
+  { name: '生成回答', detail: '正在综合信息生成最终答案...' }
+]
+
+// 趣味提示
+const funTips = [
+  '正在知识的海洋中遨游...',
+  '让AI仔细思考一下这个问题...',
+  '正在建立知识点之间的联系...',
+  '这个问题有点意思，让我分析分析...',
+  '调用脑细胞中...',
+  '知识图谱构建ing...',
+  '答案马上就到～',
+  '正在调动专业知识库...'
 ]
 const thinkingCurrent = ref(-1)
+const thinkingProgress = ref(0)
+const liveReasoningChain = ref([])
+const currentTipIndex = ref(0)
+let tipRotateTimer = null
 
 // 配置 marked
 marked.setOptions({
@@ -535,6 +643,81 @@ const mockCitations = [
   { id: 'n3', type: 'case', typeName: '案例', title: '2023年XX工地事故' },
   { id: 'n5', type: 'law', typeName: '法规', title: '行政处罚法' }
 ]
+
+// 根据问题动态生成图谱数据
+const generateDynamicGraphData = (question, reasoningChain) => {
+  const entities = reasoningChain.flatMap(step => step.entities || [])
+  const knowledgeFound = reasoningChain.flatMap(step => step.details?.knowledge_found || [])
+
+  const baseY = 50
+  const nodeSpacing = 140
+  const startX = 80
+
+  // 动态生成节点
+  const nodes = []
+  const edges = []
+
+  // 问题节点
+  nodes.push({
+    id: 'q1',
+    label: question.length > 10 ? question.slice(0, 10) + '...' : question,
+    type: 'question',
+    x: 200,
+    y: baseY,
+    description: question,
+    attributes: []
+  })
+
+  // 基于找到的知识生成节点
+  const uniqueKnowledge = [...new Set(knowledgeFound.filter(k => k))].slice(0, 5)
+  uniqueKnowledge.forEach((title, idx) => {
+    const types = ['law', 'case', 'policy', 'article', 'standard']
+    nodes.push({
+      id: `n${idx + 1}`,
+      label: title.length > 12 ? title.slice(0, 12) + '...' : title,
+      type: types[idx % types.length],
+      x: startX + (idx % 3) * nodeSpacing,
+      y: baseY + Math.floor(idx / 3) * 120 + 100,
+      description: `与"${question}"相关的知识`,
+      attributes: [{ key: '来源', value: '知识库' }]
+    })
+
+    edges.push({
+      id: `e${idx + 1}`,
+      source: 'q1',
+      target: `n${idx + 1}`,
+      label: '涉及'
+    })
+  })
+
+  // 基于实体生成额外节点
+  const uniqueEntities = [...new Set(entities.filter(e => e))].slice(0, 4)
+  uniqueEntities.forEach((entity, idx) => {
+    const nodeId = `e${idx + 10}`
+    nodes.push({
+      id: nodeId,
+      label: entity.length > 8 ? entity.slice(0, 8) + '...' : entity,
+      type: 'policy',
+      x: startX + 60 + (idx % 2) * 200,
+      y: baseY + 280,
+      description: `识别到的实体: ${entity}`,
+      attributes: [{ key: '类型', value: '实体' }]
+    })
+
+    // 连接到最近的知识节点
+    if (uniqueKnowledge.length > 0) {
+      const targetIdx = idx % uniqueKnowledge.length
+      edges.push({
+        id: `ee${idx + 1}`,
+        source: `n${targetIdx + 1}`,
+        target: nodeId,
+        label: '关联'
+      })
+    }
+  })
+
+  return { nodes, edges }
+}
 
 // 获取节点颜色
 const getNodeColor = (type) => {
@@ -674,6 +857,73 @@ const clearHistory = () => {
   resetGraph()
 }
 
+// 思考动画 - 模拟进度 + 实时推理链
+const REASONING_STEPS = [
+  { query: '理解问题并识别关键实体', result: '正在分析问题的关键实体和语义...', entities: [] },
+  { query: '检索相关知识库内容', result: '正在搜索相关的法规、案例和文件...', entities: [] },
+  { query: '图谱推理与关联扩展', result: '正在构建实体间的关联关系...', entities: [] },
+  { query: '综合知识生成最终回答', result: '正在整合信息生成答案...', entities: [] }
+]
+
+const startThinkingAnimation = () => {
+  let progress = 0
+  let stepIndex = 0
+  liveReasoningChain.value = []
+  currentTipIndex.value = 0
+
+  // 立即显示第一条
+  liveReasoningChain.value.push({ ...REASONING_STEPS[0] })
+
+  const timer = setInterval(() => {
+    progress += Math.random() * 15 + 5
+    if (progress > 100) progress = 100
+    thinkingProgress.value = Math.round(progress)
+
+    // 根据进度更新当前步骤
+    const totalSteps = REASONING_STEPS.length
+    const stepThreshold = 100 / totalSteps
+    stepIndex = Math.min(Math.floor(progress / stepThreshold), totalSteps - 1)
+    thinkingCurrent.value = stepIndex
+
+    // 更新推理链
+    if (stepIndex < totalSteps) {
+      // 更新最后一条的状态
+      const lastIdx = liveReasoningChain.value.length - 1
+      if (lastIdx >= 0) {
+        liveReasoningChain.value[lastIdx] = {
+          ...REASONING_STEPS[stepIndex],
+          entities: stepIndex > 0 ? generateMockEntities(stepIndex) : []
+        }
+      }
+      // 如果进入新步骤，添加新步骤
+      if (stepIndex > lastIdx && stepIndex < totalSteps) {
+        liveReasoningChain.value.push({ ...REASONING_STEPS[stepIndex] })
+      }
+    }
+
+    // 轮换趣味提示
+    if (Math.random() < 0.3) {
+      currentTipIndex.value = (currentTipIndex.value + 1) % funTips.length
+    }
+
+    if (progress >= 100) {
+      clearInterval(timer)
+    }
+  }, 300)
+  return timer
+}
+
+// 生成模拟实体用于显示
+const generateMockEntities = (stepIdx) => {
+  const entitySets = [
+    ['脚手架', '坠落事故', '安全施工'],
+    ['安全生产管理条例', '第78条', '行政处罚法'],
+    ['关联法规', '处罚标准', '裁量基准'],
+    ['最终答案', '法律依据', '处罚建议']
+  ]
+  return entitySets[stepIdx] || []
+}
+
 // 发送消息
 const handleSend = async () => {
   if (!inputMessage.value.trim()) return
@@ -688,16 +938,32 @@ const handleSend = async () => {
   inputMessage.value = ''
   isThinking.value = true
   thinkingCurrent.value = 0
+  thinkingProgress.value = 0
+  liveReasoningChain.value = []
+
+  // 启动进度动画
+  const progressTimer = startThinkingAnimation()
 
   scrollToBottom()
 
   try {
-    const result = await graphApi.qa(userMsg.content)
+    const result = await graphApi.qa(userMsg.content, useNeo4j.value)
 
-    // 更新图谱数据
-    if (result.graph_data) {
-      graphData.nodes = result.graph_data.nodes || []
-      graphData.edges = result.graph_data.edges || []
+    // 停止进度动画
+    clearInterval(progressTimer)
+    thinkingProgress.value = 100
+    thinkingCurrent.value = thinkingSteps.length - 1
+
+    // 更新图谱数据 - 使用API返回的数据或动态生成
+    if (result.graph_data && result.graph_data.nodes && result.graph_data.nodes.length > 0) {
+      graphData.nodes = result.graph_data.nodes
+      graphData.edges = result.graph_data.edges
+    } else {
+      // 动态生成图谱数据
+      const reasoningChain = result.reasoning_chain || liveReasoningChain.value
+      const generatedGraph = generateDynamicGraphData(userMsg.content, reasoningChain)
+      graphData.nodes = generatedGraph.nodes
+      graphData.edges = generatedGraph.edges
     }
     highlightedNodes.value = []
     highlightedEdges.value = []
@@ -716,6 +982,7 @@ const handleSend = async () => {
 
   } catch (error) {
     console.error('图谱问答失败:', error)
+    clearInterval(progressTimer)
     isThinking.value = false
     thinkingCurrent.value = -1
     ElMessage.error('问答服务出错，请稍后重试')
@@ -751,9 +1018,45 @@ const scrollToBottom = () => {
 }
 
 onMounted(() => {
-  // 初始化图谱
-  graphData.nodes = [...mockGraphData.nodes]
-  graphData.edges = [...mockGraphData.edges]
+  // 初始化图谱 - 延迟加载模拟数据
+  setTimeout(() => {
+    graphData.nodes = [...mockGraphData.nodes]
+    graphData.edges = [...mockGraphData.edges]
+  }, 500)
+})
+
+// 图谱数据变化的观察者 - 动态效果
+import { watch } from 'vue'
+let prevNodeCount = 0
+let prevEdgeCount = 0
+
+watch(() => graphData.nodes.length, (newLen) => {
+  if (newLen > prevNodeCount && prevNodeCount > 0) {
+    // 有新节点时添加动画标记
+    nextTick(() => {
+      document.querySelectorAll('.node-group').forEach((g, idx) => {
+        if (idx >= prevNodeCount) {
+          g.classList.add('new-node')
+          setTimeout(() => g.classList.remove('new-node'), 600)
+        }
+      })
+    })
+  }
+  prevNodeCount = newLen
+})
+
+watch(() => graphData.edges.length, (newLen) => {
+  if (newLen > prevEdgeCount && prevEdgeCount > 0) {
+    nextTick(() => {
+      document.querySelectorAll('.edge-path').forEach((e, idx) => {
+        if (idx >= prevEdgeCount) {
+          e.classList.add('new-edge')
+          setTimeout(() => e.classList.remove('new-edge'), 500)
+        }
+      })
+    })
+  }
+  prevEdgeCount = newLen
 })
 </script>
 
@@ -1059,31 +1362,275 @@ onMounted(() => {
 .thinking {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.thinking-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.progress-bar {
+  flex: 1;
+  height: 6px;
+  background: #e4e7ed;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.progress-text {
+  font-size: 12px;
+  color: #667eea;
+  font-weight: 600;
+  min-width: 40px;
 }
 
 .thinking-steps {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .thinking-step {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #f5f7fa;
   color: #909399;
   font-size: 14px;
+  transition: all 0.3s ease;
 }
 
 .thinking-step.active {
-  color: #409eff;
+  background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+  color: #667eea;
+  transform: translateX(4px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
+}
+
+.thinking-step.completed {
+  background: #f0f9f0;
+  color: #67c23a;
 }
 
 .thinking-icon {
   width: 20px;
   display: flex;
   justify-content: center;
+  align-items: center;
+}
+
+.check-icon {
+  color: #67c23a;
+}
+
+.loading-icon {
+  color: #667eea;
+  animation: rotate 1s linear infinite;
+}
+
+.waiting-icon {
+  color: #c0c4cc;
+}
+
+@keyframes rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.step-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.step-name {
+  font-weight: 500;
+}
+
+.step-detail {
+  font-size: 12px;
+  color: #909399;
+  font-weight: normal;
+}
+
+.thinking-step.active .step-detail {
+  color: #667eea;
+  opacity: 0.8;
+}
+
+.fun-tip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #c0c4cc;
+  padding: 8px 12px;
+  background: #fdf6ec;
+  border-radius: 6px;
+  animation: fadeIn 0.5s ease;
+}
+
+.fun-tip .el-icon {
+  color: #e6a23c;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.thinking-mode {
+  margin-left: 8px;
+}
+
+/* 实时推理链样式 */
+.reasoning-section.thinking-reasoning {
+  background: #f5f7fa;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.reasoning-section.thinking-reasoning .reasoning-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #667eea;
+  margin-bottom: 16px;
+}
+
+.reasoning-progress-text {
+  margin-left: auto;
+  font-size: 12px;
+  color: #909399;
+  background: #fff;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.reasoning-section.thinking-reasoning .reasoning-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.reasoning-section.thinking-reasoning .reasoning-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  position: relative;
+  padding: 12px 0;
+}
+
+.reasoning-section.thinking-reasoning .step-indicator {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  z-index: 1;
+}
+
+.reasoning-section.thinking-reasoning .step-check {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #67c23a;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reasoning-section.thinking-reasoning .step-loading {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #667eea;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reasoning-section.thinking-reasoning .step-loading .el-icon {
+  animation: rotate 1s linear infinite;
+}
+
+.reasoning-section.thinking-reasoning .step-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.reasoning-section.thinking-reasoning .step-query {
+  font-weight: 500;
+  color: #303133;
+  font-size: 14px;
+}
+
+.reasoning-section.thinking-reasoning .step-result {
+  color: #606266;
+  font-size: 13px;
+  margin-top: 4px;
+}
+
+.reasoning-section.thinking-reasoning .step-result.is-calculating {
+  color: #667eea;
+}
+
+.calc-dots {
+  display: inline-block;
+}
+
+.calc-dots::after {
+  content: '';
+  animation: dots 1.5s infinite;
+}
+
+@keyframes dots {
+  0%, 20% { content: ''; }
+  40% { content: '.'; }
+  60% { content: '..'; }
+  80%, 100% { content: '...'; }
+}
+
+.reasoning-section.thinking-reasoning .step-entities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.reasoning-section.thinking-reasoning .step-connector {
+  position: absolute;
+  left: 11px;
+  top: 36px;
+  width: 2px;
+  height: calc(100% - 12px);
+  background: #e4e7ed;
+}
+
+.reasoning-section.thinking-reasoning .reasoning-step.is-active .step-connector {
+  background: linear-gradient(to bottom, #667eea 0%, #e4e7ed 100%);
+}
+
+.reasoning-section.thinking-reasoning .reasoning-step.is-done .step-connector {
+  background: #67c23a;
 }
 
 /* 输入区域 */
@@ -1129,6 +1676,41 @@ onMounted(() => {
 
 .node-group {
   cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.node-group.new-node {
+  animation: nodeAppear 0.6s ease forwards;
+}
+
+@keyframes nodeAppear {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.edge-path.new-edge {
+  animation: edgeDraw 0.5s ease forwards;
+}
+
+@keyframes edgeDraw {
+  0% {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+  }
+  100% {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 0;
+  }
 }
 
 .node-circle {
