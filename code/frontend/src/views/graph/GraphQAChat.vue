@@ -15,7 +15,7 @@
               <div class="header-actions">
                 <el-switch
                   v-model="useNeo4j"
-                  active-text="使用Neo4j"
+                  active-text="图谱推理"
                   inactive-text=""
                 />
                 <el-switch
@@ -200,7 +200,7 @@
                   <div class="reasoning-section thinking-reasoning" v-if="liveReasoningChain.length > 0">
                     <div class="reasoning-title">
                       <el-icon><Cpu /></el-icon>
-                      <span>推理进行中</span>
+                      <span>图谱推理中</span>
                       <span class="reasoning-progress-text">{{ thinkingProgress }}%</span>
                     </div>
                     <div class="reasoning-steps">
@@ -209,26 +209,46 @@
                         :key="stepIdx"
                         class="reasoning-step"
                         :class="{
-                          'is-active': stepIdx === liveReasoningChain.length - 1,
-                          'is-done': stepIdx < liveReasoningChain.length - 1
+                          'is-active': stepIdx === thinkingCurrent,
+                          'is-done': stepIdx < thinkingCurrent
                         }"
                       >
                         <div class="step-indicator">
-                          <div v-if="stepIdx < liveReasoningChain.length - 1" class="step-check">
+                          <div v-if="stepIdx < thinkingCurrent" class="step-check">
                             <el-icon><Check /></el-icon>
                           </div>
-                          <div v-else class="step-loading">
+                          <div v-else-if="stepIdx === thinkingCurrent" class="step-loading">
                             <el-icon class="is-loading"><Loading /></el-icon>
                           </div>
+                          <div v-else class="step-waiting"></div>
                         </div>
                         <div class="step-content">
                           <div class="step-query">{{ step.query }}</div>
-                          <div class="step-result" :class="{ 'is-calculating': stepIdx === liveReasoningChain.length - 1 }">
-                            <template v-if="stepIdx === liveReasoningChain.length - 1">
-                              <span class="calc-dots">正在分析</span>
+                          <div class="step-result" :class="{ 'is-calculating': stepIdx === thinkingCurrent }">
+                            <template v-if="stepIdx === thinkingCurrent">
+                              <template v-if="stepIdx === 3">
+                                <div class="final-step-detail">
+                                  <div class="final-progress">
+                                    <div class="final-progress-bar">
+                                      <div class="final-progress-fill" :style="{ width: (thinkingProgress % 30) * 3.3 + '%' }"></div>
+                                    </div>
+                                    <span>整合知识中...</span>
+                                  </div>
+                                  <div class="final-tips">
+                                    <el-icon><Connection /></el-icon>
+                                    <span>{{ funTips[currentTipIndex] }}</span>
+                                  </div>
+                                </div>
+                              </template>
+                              <template v-else>
+                                <span class="calc-dots">正在分析</span>
+                              </template>
+                            </template>
+                            <template v-else-if="stepIdx < thinkingCurrent">
+                              {{ step.result }}
                             </template>
                             <template v-else>
-                              {{ step.result }}
+                              <span class="step-pending">等待中...</span>
                             </template>
                           </div>
                           <div v-if="step.entities?.length" class="step-entities">
@@ -328,11 +348,11 @@
           </template>
 
           <div class="graph-container" ref="graphContainer">
-            <svg ref="graphSvg" width="100%" height="400">
+            <svg ref="graphSvg" width="100%" height="450" viewBox="0 0 400 450" preserveAspectRatio="xMidYMid meet">
               <!-- 动态渲染图谱 -->
               <defs>
                 <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                  <polygon points="0 0, 10 3.5, 0 7" fill="#909399" />
+                  <polygon points="0 0, 10 3.5, 0 7" fill="#7b8db5" />
                 </marker>
                 <marker id="arrowhead-active" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
                   <polygon points="0 0, 10 3.5, 0 7" fill="#409eff" />
@@ -342,11 +362,11 @@
               <!-- 边 -->
               <g class="edges">
                 <transition-group name="edge-fade">
-                  <g v-for="edge in graphData.edges" :key="edge.id">
+                  <g v-for="edge in graphData.edges" :key="edge.id" :class="{ 'new-edge': edge.isNew }">
                     <path
                       :d="getEdgePath(edge)"
-                      :stroke="highlightedEdges.includes(edge.id) ? '#409eff' : '#dcdfe6'"
-                      :stroke-width="highlightedEdges.includes(edge.id) ? 3 : 2"
+                      :stroke="highlightedEdges.includes(edge.id) ? '#409eff' : '#7b8db5'"
+                      :stroke-width="highlightedEdges.includes(edge.id) ? 3 : 2.5"
                       fill="none"
                       :marker-end="highlightedEdges.includes(edge.id) ? 'url(#arrowhead-active)' : 'url(#arrowhead)'"
                       class="edge-path"
@@ -358,7 +378,9 @@
                       :y="(graphData.nodes.find(n => n.id === edge.source)?.y + graphData.nodes.find(n => n.id === edge.target)?.y) / 2 - 8"
                       text-anchor="middle"
                       class="edge-label"
-                      :fill="highlightedEdges.includes(edge.id) ? '#409eff' : '#909399'"
+                      :fill="highlightedEdges.includes(edge.id) ? '#409eff' : '#5a6b85'"
+                      font-size="11"
+                      font-weight="500"
                     >
                       {{ edge.label }}
                     </text>
@@ -373,31 +395,31 @@
                     v-for="node in graphData.nodes"
                     :key="node.id"
                     :transform="`translate(${node.x}, ${node.y})`"
-                    class="node-group"
+                    :class="['node-group', { 'new-node': node.isNew }]"
                     @click="selectNode(node)"
                     @mouseenter="hoverNode(node.id)"
                     @mouseleave="unhoverNode"
                   >
                     <!-- 节点背景 -->
                     <circle
-                      :r="selectedNode?.id === node.id ? 40 : (hoveredNodeId === node.id ? 38 : 35)"
+                      :r="selectedNode?.id === node.id ? 32 : (hoveredNodeId === node.id ? 30 : 28)"
                       :fill="getNodeColor(node.type)"
                       :stroke="selectedNode?.id === node.id || highlightedNodes.includes(node.id) ? '#409eff' : 'transparent'"
-                      :stroke-width="3"
+                      :stroke-width="2"
                       class="node-circle"
                     />
                     <!-- 节点图标 -->
                     <text
-                      y="-5"
+                      y="-4"
                       text-anchor="middle"
                       fill="#fff"
-                      font-size="16"
+                      font-size="14"
                     >
                       {{ getNodeIcon(node.type) }}
                     </text>
                     <!-- 节点标签 -->
                     <text
-                      y="50"
+                      y="42"
                       text-anchor="middle"
                       :fill="selectedNode?.id === node.id || hoveredNodeId === node.id ? '#303133' : '#606266'"
                       font-size="12"
@@ -409,6 +431,37 @@
                 </transition-group>
               </g>
             </svg>
+
+            <!-- 图谱生成进度指示器 -->
+            <div v-if="graphPhase" class="graph-progress-overlay">
+              <div class="graph-progress-content">
+                <div class="progress-ring">
+                  <svg width="80" height="80" viewBox="0 0 80 80">
+                    <circle cx="40" cy="40" r="35" stroke="#e4e7ed" stroke-width="6" fill="none" />
+                    <circle
+                      cx="40" cy="40" r="35"
+                      stroke="#409eff"
+                      stroke-width="6"
+                      fill="none"
+                      stroke-linecap="round"
+                      :stroke-dasharray="220"
+                      :stroke-dashoffset="220 - (220 * graphProgress / 100)"
+                      transform="rotate(-90 40 40)"
+                      style="transition: stroke-dashoffset 0.3s ease"
+                    />
+                  </svg>
+                  <div class="progress-text">{{ graphProgress }}%</div>
+                </div>
+                <div class="progress-label">
+                  <span v-if="graphPhase === 'nodes'">正在构建知识节点...</span>
+                  <span v-else>正在连接关系边...</span>
+                </div>
+                <div class="progress-nodes">
+                  <span class="node-count">{{ graphData.nodes.length }} 个节点</span>
+                  <span class="edge-count">{{ graphData.edges.length }} 条边</span>
+                </div>
+              </div>
+            </div>
 
             <!-- 节点详情面板 -->
             <div v-if="selectedNode" class="node-detail">
@@ -497,7 +550,7 @@ const isThinking = ref(false)
 const messages = ref([])
 const chatMessagesRef = ref(null)
 const showReasoning = ref(true)
-const useNeo4j = ref(false)
+const useNeo4j = ref(true)
 const expandedSteps = ref([])
 const selectedNode = ref(null)
 const hoveredNodeId = ref(null)
@@ -509,6 +562,10 @@ const graphData = reactive({
   nodes: [],
   edges: []
 })
+
+// 图谱渲染进度
+const graphProgress = ref(0)
+const graphPhase = ref('')
 
 const exampleQuestions = [
   '工地脚手架坠落事故如何处罚？',
@@ -524,16 +581,16 @@ const thinkingSteps = [
   { name: '生成回答', detail: '正在综合信息生成最终答案...' }
 ]
 
-// 趣味提示
+// 趣味提示 - 与图谱相关
 const funTips = [
-  '正在知识的海洋中遨游...',
-  '让AI仔细思考一下这个问题...',
-  '正在建立知识点之间的联系...',
-  '这个问题有点意思，让我分析分析...',
-  '调用脑细胞中...',
-  '知识图谱构建ing...',
-  '答案马上就到～',
-  '正在调动专业知识库...'
+  '正在知识图谱中查找关联信息...',
+  '正在分析实体间的语义关系...',
+  '正在构建多跳推理路径...',
+  '正在匹配相关法规条款...',
+  '正在整合案例判决依据...',
+  '正在验证逻辑推导链条...',
+  '正在生成结构化回答...',
+  '即将完成图谱推理...'
 ]
 const thinkingCurrent = ref(-1)
 const thinkingProgress = ref(0)
@@ -649,35 +706,32 @@ const generateDynamicGraphData = (question, reasoningChain) => {
   const entities = reasoningChain.flatMap(step => step.entities || [])
   const knowledgeFound = reasoningChain.flatMap(step => step.details?.knowledge_found || [])
 
-  const baseY = 50
-  const nodeSpacing = 140
-  const startX = 80
-
-  // 动态生成节点
   const nodes = []
   const edges = []
 
-  // 问题节点
+  // 问题节点 - 顶部居中
   nodes.push({
     id: 'q1',
     label: question.length > 10 ? question.slice(0, 10) + '...' : question,
     type: 'question',
     x: 200,
-    y: baseY,
+    y: 50,
     description: question,
     attributes: []
   })
 
   // 基于找到的知识生成节点
   const uniqueKnowledge = [...new Set(knowledgeFound.filter(k => k))].slice(0, 5)
+  const types = ['law', 'case', 'policy', 'article', 'standard']
   uniqueKnowledge.forEach((title, idx) => {
-    const types = ['law', 'case', 'policy', 'article', 'standard']
+    const row = Math.floor(idx / 3)
+    const col = idx % 3
     nodes.push({
       id: `n${idx + 1}`,
       label: title.length > 12 ? title.slice(0, 12) + '...' : title,
       type: types[idx % types.length],
-      x: startX + (idx % 3) * nodeSpacing,
-      y: baseY + Math.floor(idx / 3) * 120 + 100,
+      x: 80 + col * 150,
+      y: 140 + row * 100,
       description: `与"${question}"相关的知识`,
       attributes: [{ key: '来源', value: '知识库' }]
     })
@@ -698,13 +752,12 @@ const generateDynamicGraphData = (question, reasoningChain) => {
       id: nodeId,
       label: entity.length > 8 ? entity.slice(0, 8) + '...' : entity,
       type: 'policy',
-      x: startX + 60 + (idx % 2) * 200,
-      y: baseY + 280,
+      x: 120 + (idx % 3) * 130,
+      y: 300,
       description: `识别到的实体: ${entity}`,
       attributes: [{ key: '类型', value: '实体' }]
     })
 
-    // 连接到最近的知识节点
     if (uniqueKnowledge.length > 0) {
       const targetIdx = idx % uniqueKnowledge.length
       edges.push({
@@ -862,44 +915,41 @@ const REASONING_STEPS = [
   { query: '理解问题并识别关键实体', result: '正在分析问题的关键实体和语义...', entities: [] },
   { query: '检索相关知识库内容', result: '正在搜索相关的法规、案例和文件...', entities: [] },
   { query: '图谱推理与关联扩展', result: '正在构建实体间的关联关系...', entities: [] },
-  { query: '综合知识生成最终回答', result: '正在整合信息生成答案...', entities: [] }
+  { query: '综合知识生成最终回答', result: '正在综合法规、案例和实体信息生成答案...', entities: [] }
 ]
 
 const startThinkingAnimation = () => {
   let progress = 0
-  let stepIndex = 0
   liveReasoningChain.value = []
   currentTipIndex.value = 0
 
-  // 立即显示第一条
-  liveReasoningChain.value.push({ ...REASONING_STEPS[0] })
+  // 先添加所有4个步骤
+  REASONING_STEPS.forEach((step, idx) => {
+    liveReasoningChain.value.push({
+      query: step.query,
+      result: step.result,
+      entities: []
+    })
+  })
+  thinkingCurrent.value = 0
 
   const timer = setInterval(() => {
-    progress += Math.random() * 15 + 5
+    progress += Math.random() * 12 + 4
     if (progress > 100) progress = 100
     thinkingProgress.value = Math.round(progress)
 
     // 根据进度更新当前步骤
     const totalSteps = REASONING_STEPS.length
     const stepThreshold = 100 / totalSteps
-    stepIndex = Math.min(Math.floor(progress / stepThreshold), totalSteps - 1)
+    const stepIndex = Math.min(Math.floor(progress / stepThreshold), totalSteps - 1)
     thinkingCurrent.value = stepIndex
 
-    // 更新推理链
-    if (stepIndex < totalSteps) {
-      // 更新最后一条的状态
-      const lastIdx = liveReasoningChain.value.length - 1
-      if (lastIdx >= 0) {
-        liveReasoningChain.value[lastIdx] = {
-          ...REASONING_STEPS[stepIndex],
-          entities: stepIndex > 0 ? generateMockEntities(stepIndex) : []
-        }
+    // 更新每个步骤的实体显示
+    liveReasoningChain.value.forEach((item, idx) => {
+      if (idx <= stepIndex && idx > 0) {
+        item.entities = generateMockEntities(idx)
       }
-      // 如果进入新步骤，添加新步骤
-      if (stepIndex > lastIdx && stepIndex < totalSteps) {
-        liveReasoningChain.value.push({ ...REASONING_STEPS[stepIndex] })
-      }
-    }
+    })
 
     // 轮换趣味提示
     if (Math.random() < 0.3) {
@@ -909,7 +959,7 @@ const startThinkingAnimation = () => {
     if (progress >= 100) {
       clearInterval(timer)
     }
-  }, 300)
+  }, 250)
   return timer
 }
 
@@ -947,26 +997,52 @@ const handleSend = async () => {
   scrollToBottom()
 
   try {
-    const result = await graphApi.qa(userMsg.content, useNeo4j.value)
+    const result = await graphApi.qa(userMsg.content, true)
 
     // 停止进度动画
     clearInterval(progressTimer)
     thinkingProgress.value = 100
     thinkingCurrent.value = thinkingSteps.length - 1
 
-    // 更新图谱数据 - 使用API返回的数据或动态生成
+    // 逐步渲染图谱动画
+    let finalNodes = []
+    let finalEdges = []
     if (result.graph_data && result.graph_data.nodes && result.graph_data.nodes.length > 0) {
-      graphData.nodes = result.graph_data.nodes
-      graphData.edges = result.graph_data.edges
+      finalNodes = result.graph_data.nodes
+      finalEdges = result.graph_data.edges
     } else {
-      // 动态生成图谱数据
       const reasoningChain = result.reasoning_chain || liveReasoningChain.value
       const generatedGraph = generateDynamicGraphData(userMsg.content, reasoningChain)
-      graphData.nodes = generatedGraph.nodes
-      graphData.edges = generatedGraph.edges
+      finalNodes = generatedGraph.nodes
+      finalEdges = generatedGraph.edges
     }
-    highlightedNodes.value = []
-    highlightedEdges.value = []
+
+    // 清空图谱
+    graphData.nodes = []
+    graphData.edges = []
+    graphPhase.value = ''
+
+    // 分批设置数据，逐步显示
+    let nodeIdx = 0
+    const addNode = () => {
+      if (nodeIdx < finalNodes.length) {
+        graphData.nodes.push(finalNodes[nodeIdx])
+        nodeIdx++
+        setTimeout(addNode, 400)
+      } else {
+        // 节点添加完，添加边
+        let edgeIdx = 0
+        const addEdge = () => {
+          if (edgeIdx < finalEdges.length) {
+            graphData.edges.push(finalEdges[edgeIdx])
+            edgeIdx++
+            setTimeout(addEdge, 300)
+          }
+        }
+        setTimeout(addEdge, 300)
+      }
+    }
+    setTimeout(addNode, 300)
 
     isThinking.value = false
     thinkingCurrent.value = -1
@@ -983,6 +1059,9 @@ const handleSend = async () => {
   } catch (error) {
     console.error('图谱问答失败:', error)
     clearInterval(progressTimer)
+    graphPhase.value = ''
+    graphData.nodes = finalNodes
+    graphData.edges = finalEdges
     isThinking.value = false
     thinkingCurrent.value = -1
     ElMessage.error('问答服务出错，请稍后重试')
@@ -1018,11 +1097,7 @@ const scrollToBottom = () => {
 }
 
 onMounted(() => {
-  // 初始化图谱 - 延迟加载模拟数据
-  setTimeout(() => {
-    graphData.nodes = [...mockGraphData.nodes]
-    graphData.edges = [...mockGraphData.edges]
-  }, 500)
+  // 初始为空图谱，等待用户提问后才填充数据
 })
 
 // 图谱数据变化的观察者 - 动态效果
@@ -1572,6 +1647,72 @@ watch(() => graphData.edges.length, (newLen) => {
   animation: rotate 1s linear infinite;
 }
 
+.reasoning-section.thinking-reasoning .step-waiting {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #e4e7ed;
+  border: 2px solid #c0c4cc;
+}
+
+.step-pending {
+  color: #c0c4cc;
+  font-style: italic;
+}
+
+/* 最终步骤的详细信息展示 */
+.final-step-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.final-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: #667eea;
+}
+
+.final-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: #e4e7ed;
+  border-radius: 2px;
+  overflow: hidden;
+  max-width: 120px;
+}
+
+.final-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.final-tips {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #909399;
+  background: #f5f7fa;
+  padding: 4px 10px;
+  border-radius: 12px;
+  animation: fadeIn 0.5s ease;
+}
+
+.final-tips .el-icon {
+  color: #667eea;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .reasoning-section.thinking-reasoning .step-content {
   flex: 1;
   min-width: 0;
@@ -1667,11 +1808,12 @@ watch(() => graphData.edges.length, (newLen) => {
   position: relative;
   background: linear-gradient(135deg, #f5f7fa 0%, #e4e7ed 100%);
   border-radius: 8px;
-  min-height: 400px;
+  min-height: 450px;
 }
 
 .graph-container svg {
   display: block;
+  overflow: visible;
 }
 
 .node-group {
@@ -1683,33 +1825,60 @@ watch(() => graphData.edges.length, (newLen) => {
   animation: nodeAppear 0.6s ease forwards;
 }
 
+.node-group.new-node .node-circle {
+  animation: nodeGlow 0.6s ease forwards;
+}
+
+@keyframes nodeGlow {
+  0% {
+    filter: drop-shadow(0 0 8px #409eff) drop-shadow(0 0 16px #409eff);
+    opacity: 0.5;
+  }
+  50% {
+    filter: drop-shadow(0 0 20px #409eff) drop-shadow(0 0 30px #409eff);
+    opacity: 0.8;
+  }
+  100% {
+    filter: none;
+    opacity: 1;
+  }
+}
+
 @keyframes nodeAppear {
   0% {
     opacity: 0;
-    transform: scale(0.3);
+    transform: scale(0.3) translateY(-20px);
   }
   50% {
     opacity: 0.7;
-    transform: scale(1.1);
+    transform: scale(1.1) translateY(0);
+  }
+  70% {
+    transform: scale(1.15) translateY(-5px);
   }
   100% {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
   }
 }
 
 .edge-path.new-edge {
-  animation: edgeDraw 0.5s ease forwards;
+  animation: edgeDraw 0.6s ease forwards;
 }
 
 @keyframes edgeDraw {
   0% {
-    stroke-dasharray: 100;
-    stroke-dashoffset: 100;
+    stroke-dasharray: 200;
+    stroke-dashoffset: 200;
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
   }
   100% {
-    stroke-dasharray: 100;
+    stroke-dasharray: 200;
     stroke-dashoffset: 0;
+    opacity: 1;
   }
 }
 
@@ -1722,8 +1891,12 @@ watch(() => graphData.edges.length, (newLen) => {
 }
 
 .edge-label {
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 500;
   pointer-events: none;
+  background: rgba(255,255,255,0.8);
+  padding: 1px 3px;
+  border-radius: 2px;
 }
 
 /* 节点详情 */
@@ -1782,6 +1955,72 @@ watch(() => graphData.edges.length, (newLen) => {
 .detail-actions {
   margin-top: 12px;
   text-align: right;
+}
+
+/* 图谱生成进度指示器 */
+.graph-progress-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(245, 247, 250, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  backdrop-filter: blur(2px);
+}
+
+.graph-progress-content {
+  text-align: center;
+}
+
+.progress-ring {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  margin: 0 auto 16px;
+}
+
+.progress-ring svg {
+  transform: rotate(-90deg);
+}
+
+.progress-ring circle {
+  transition: stroke-dashoffset 0.3s ease;
+}
+
+.progress-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 16px;
+  font-weight: 600;
+  color: #409eff;
+}
+
+.progress-label {
+  font-size: 14px;
+  color: #606266;
+  margin-bottom: 8px;
+}
+
+.progress-nodes {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  font-size: 12px;
+  color: #909399;
+}
+
+.node-count {
+  color: #409eff;
+}
+
+.edge-count {
+  color: #67c23a;
 }
 
 /* 图例 */
