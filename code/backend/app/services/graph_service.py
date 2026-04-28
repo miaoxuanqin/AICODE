@@ -421,7 +421,7 @@ class GraphService:
             return "、".join(topics[:5])
         return ""
 
-    def _generate_answer(self, question: str, search_results: List[Dict]) -> str:
+    def _generate_answer(self, question: str, search_results: List[Dict], graph_context: str = "") -> str:
         """生成最终回答"""
         # 构建 Prompt
         prompt = f"""你是住建领域知识助手。请根据以下知识内容回答用户问题。
@@ -434,6 +434,10 @@ class GraphService:
         for i, item in enumerate(search_results[:5], 1):
             content = item.get("content", "") or item.get("summary", "")
             prompt += f"\n【知识 {i}】{item.get('title', '')}\n{content[:500]}\n"
+
+        # 如果有图谱上下文，添加到 prompt 中
+        if graph_context:
+            prompt += f"\n{graph_context}\n"
 
         prompt += """
 请给出专业、准确的回答。如果知识不足以回答，请说明。
@@ -456,6 +460,86 @@ class GraphService:
         except Exception as e:
             print(f"LLM 调用失败: {e}")
             return "服务暂时不可用"
+
+    def _build_graph_context(self, neo4j_context: Dict[str, Any], entities: List[Dict]) -> str:
+        """
+        从 Neo4j 上下文构建可读的图谱描述，用于补充 LLM 回答
+
+        Args:
+            neo4j_context: Neo4j 查询结果（包含 nodes, edges）
+            entities: 原始识别的实体列表
+
+        Returns:
+            可读性好、可直接加入 prompt 的图谱描述字符串
+        """
+        if not neo4j_context.get("available"):
+            return ""
+
+        nodes = neo4j_context.get("nodes", [])
+        edges = neo4j_context.get("edges", [])
+
+        if not nodes:
+            return ""
+
+        lines = ["\n=== 知识图谱关系（供参考）===\n"]
+
+        # 按节点 label 分组，便于理解
+        label_groups = {}
+        for node in nodes:
+            label = node.get("label", "Unknown")
+            name = node.get("name", "")
+            if name:
+                if label not in label_groups:
+                    label_groups[label] = []
+                label_groups[label].append(name)
+
+        # 输出分类后的实体
+        if label_groups:
+            lines.append("【实体分类】")
+            for label, names in label_groups.items():
+                label_display = {
+                    "Law": "法规",
+                    "Article": "条款",
+                    "Standard": "标准",
+                    "Penalty": "处罚",
+                    "Case": "案例",
+                    "Subject": "主体",
+                    "Behavior": "行为"
+                }.get(label, label)
+                lines.append(f"  {label_display}：{', '.join(names[:5])}")
+
+        # 输出关系链
+        if edges:
+            lines.append("\n【关系链条】")
+            for edge in edges[:10]:  # 限制关系数量
+                source = edge.get("source", "")
+                target = edge.get("target", "")
+                relation = edge.get("type", "相关")
+
+                # 找到对应的 node name
+                source_name = next((n.get("name", "") for n in nodes if n.get("id") == source), source)
+                target_name = next((n.get("name", "") for n in nodes if n.get("id") == target), target)
+
+                # 转换关系名称
+                relation_display = {
+                    "CONTAINS": "包含",
+                    "REFERS": "引用",
+                    "DEFINES": "规定",
+                    "TRIGGERS": "触发",
+                    "APPLIES": "适用于",
+                    "INVOLVES": "涉及",
+                    "IMPOSES": "施加",
+                    "相关规定于": "相关规定于",
+                    "触发": "触发",
+                    "涉及": "涉及"
+                }.get(relation, relation)
+
+                lines.append(f"  • {source_name} {relation_display} {target_name}")
+
+        # 输出简要总结
+        lines.append(f"\n（以上图谱包含 {len(nodes)} 个实体和 {len(edges)} 条关系）")
+
+        return "\n".join(lines)
 
     # ==================== Neo4j 集成方法 ====================
 
@@ -487,6 +571,11 @@ class GraphService:
                 entity_name = entity.get("text", "")
                 if not entity_name:
                     continue
+
+                # 尝试多种匹配方式（处理书名号差异）
+                matched_name = self._match_neo4j_entity(entity_name, neo4j)
+                if matched_name:
+                    entity_name = matched_name
 
                 # 获取子图
                 subgraph = neo4j.get_subgraph(entity_name, depth=2)
@@ -536,6 +625,48 @@ class GraphService:
                 seen.add(edge_id)
                 unique.append(edge)
         return unique
+
+    def _match_neo4j_entity(self, entity_name: str, neo4j) -> Optional[str]:
+        """
+        匹配 Neo4j 中的实体名称（处理书名号差异）
+
+        Args:
+            entity_name: 原始实体名称
+            neo4j: Neo4j 服务实例
+
+        Returns:
+            匹配到的实体名称，如果没匹配到返回 None
+        """
+        # 尝试原始名称
+        if self._neo4j_entity_exists(entity_name, neo4j):
+            return entity_name
+
+        # 尝试添加书名号
+        if not entity_name.startswith('《'):
+            with_bracket = f"《{entity_name}》"
+            if self._neo4j_entity_exists(with_bracket, neo4j):
+                return with_bracket
+
+        # 尝试去掉书名号
+        if entity_name.startswith('《'):
+            without_bracket = entity_name[1:].rstrip('》')
+            if self._neo4j_entity_exists(without_bracket, neo4j):
+                return without_bracket
+
+        return None
+
+    def _neo4j_entity_exists(self, entity_name: str, neo4j) -> bool:
+        """检查实体是否存在于 Neo4j"""
+        try:
+            with neo4j.driver.session() as session:
+                result = session.run(
+                    "MATCH (n {name: $name}) RETURN count(n) as cnt",
+                    name=entity_name
+                )
+                record = result.single()
+                return record[0] > 0 if record else False
+        except Exception:
+            return False
 
     def _build_graph_from_neo4j(
         self,
@@ -764,7 +895,10 @@ class GraphService:
             nodes, edges = self.build_graph(graph_entities, all_search_items[:6])
             graph_data = {"nodes": nodes, "edges": edges}
 
-        # Step 4: 去重
+        # Step 4: 构建图谱上下文（用于 LLM）
+        graph_context = self._build_graph_context(neo4j_context, step1_entities) if neo4j_context.get("available") else ""
+
+        # Step 5: 去重
         seen_ids = set()
         unique_items = []
         for item in all_search_items:
@@ -773,7 +907,7 @@ class GraphService:
                 unique_items.append(item)
 
         reasoning_chain.append({
-            "step": 4,
+            "step": 5,
             "query": "整合知识并生成回答",
             "result": f"整合 {len(unique_items)} 条知识进行回答",
             "entities": [],
@@ -783,9 +917,9 @@ class GraphService:
             }
         })
 
-        # Step 5: 生成回答
+        # Step 6: 生成回答（传入图谱上下文）
         if unique_items:
-            final_answer = self._generate_answer(question, unique_items)
+            final_answer = self._generate_answer(question, unique_items, graph_context)
         else:
             final_answer = "抱歉，知识库中没有找到与您问题相关的内容。"
 
