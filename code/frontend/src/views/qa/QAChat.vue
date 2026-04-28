@@ -169,10 +169,9 @@
               @keydown.enter.ctrl="handleSend"
             />
             <div class="input-actions">
-              <span class="hint">按 Ctrl+Enter 发送</span>
-              <el-button type="primary" @click="handleSend" :disabled="!inputMessage.trim()">
-                <el-icon><Promotion /></el-icon>
-                发送
+              <el-button type="primary" @click="handleSend" :disabled="!inputMessage.trim() || isThinking">
+                <el-icon v-if="!isThinking"><Promotion /></el-icon>
+                {{ isThinking ? '等待回答中...' : '发送' }}
               </el-button>
             </div>
           </div>

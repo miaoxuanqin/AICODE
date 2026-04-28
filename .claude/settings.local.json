@@ -245,10 +245,37 @@
       "Bash(taskkill //F //PID 24036)",
       "Bash(taskkill //F //PID 14268)",
       "Bash(taskkill //F //PID 5732)",
-      "Bash(git reset *)"
+      "Bash(git reset *)",
+      "Bash(python -c \"from app.api.v1 import api_router; print\\('API router OK'\\)\")",
+      "Bash(python -c \"from app.services.graph_service import graph_service; print\\('Graph service OK'\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\([p for p in d.get\\('paths',{}\\).keys\\(\\) if 'graph' in p.lower\\(\\)]\\)\")",
+      "Bash(python3 -c \"from app.api.v1 import graph; print\\('graph imported successfully'\\)\")",
+      "Bash(python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('paths',{}\\).get\\('/api/v1/graph/qa',{}\\), indent=2\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2, ensure_ascii=False\\)\\)\")",
+      "Bash(taskkill //F //IM node.exe)",
+      "Read(//c/Users/MM/.claude/projects/c--AICODE3/memory/**)",
+      "Bash(findstr :8000)",
+      "Bash(findstr LISTENING)",
+      "Bash(findstr :3002)",
+      "Bash(node -e \"require\\('fs'\\).readFileSync\\('src/views/graph/GraphQAChat.vue', 'utf8'\\)\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('nodes:', len\\(d.get\\('graph_data',{}\\).get\\('nodes',[]\\)\\), 'edges:', len\\(d.get\\('graph_data',{}\\).get\\('edges',[]\\)\\)\\)\")",
+      "Bash(node --check src/views/graph/GraphQAChat.vue)",
+      "Bash(git rm *)",
+      "Bash(wsl --list)",
+      "Bash(mkdir -p ~/.config/systemd/user)",
+      "Bash(cp /mnt/c/AICODE3/06-开发参考/docker-services.service ~/.config/systemd/user/)",
+      "Bash(python -m app.scripts.sync_history_to_neo4j)",
+      "Bash(python3 -m json.tool)",
+      "Bash(python -c \"from neo4j import GraphDatabase; uri='bolt://172.20.36.91:7687'; driver=GraphDatabase.driver\\(uri\\); driver.verify_connectivity\\(\\); print\\('Neo4j connected!'\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); h=d['hits']['hits'][0]['_source']; print\\('title:', h.get\\('title',''\\)[:50]\\); print\\('content length:', len\\(h.get\\('content',''\\) or ''\\)\\); print\\('content sample:', \\(h.get\\('content',''\\) or ''\\)[:100]\\)\")",
+      "Bash(python reindex_es.py)",
+      "Bash(file *services.service)"
     ],
     "additionalDirectories": [
-      "c:\\AICODE3"
+      "c:\\AICODE3",
+      "c:\\Users\\MM\\.claude\\projects\\c--AICODE3\\memory",
+      "C:\\Users\\MM\\.config\\systemd\\user"
     ]
   }
 }

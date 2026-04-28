@@ -130,9 +130,9 @@
               @keydown.enter.ctrl="handleSend"
             />
             <div class="input-actions">
-              <el-button type="primary" @click="handleSend" :disabled="!inputMessage.trim()">
-                <el-icon><Promotion /></el-icon>
-                发送
+              <el-button type="primary" @click="handleSend" :disabled="!inputMessage.trim() || isThinking">
+                <el-icon v-if="!isThinking"><Promotion /></el-icon>
+                {{ isThinking ? '等待回答中...' : '发送' }}
               </el-button>
             </div>
           </div>
@@ -474,7 +474,7 @@ const selectRecord = (item) => {
 }
 
 const handleSend = async () => {
-  if (!inputMessage.value.trim()) return
+  if (!inputMessage.value.trim() || isThinking.value) return
 
   const userMsg = {
     role: 'user',
@@ -870,7 +870,14 @@ onMounted(async () => {
 .input-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
   margin-top: 12px;
+}
+
+.hint {
+  color: #e6a23c;
+  font-size: 13px;
 }
 
 .type-card,

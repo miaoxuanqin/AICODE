@@ -76,11 +76,24 @@ class SearchService:
         self.es.index(index=self.INDEX_NAME, id=knowledge_id, body=doc)
 
     def delete_knowledge_index(self, knowledge_id: str):
-        """删除知识索引"""
+        """删除知识索引（ES + Qdrant）"""
+        # 删除 ES 文档
         try:
             self.es.delete(index=self.INDEX_NAME, id=knowledge_id)
         except Exception:
             pass
+
+        # 删除 Qdrant 向量（根据 knowledge_id 删除所有 chunks）
+        try:
+            from qdrant_client.models import Filter, FieldCondition, MatchValue
+            self.qdrant.delete(
+                collection_name="knowledge",
+                points_selector=Filter(
+                    must=[FieldCondition(key="knowledge_id", match=MatchValue(value=knowledge_id))]
+                )
+            )
+        except Exception as e:
+            print(f"Qdrant 向量删除失败: {e}")
 
     def get_by_id(self, knowledge_id: str) -> Optional[Dict[str, Any]]:
         """根据ID获取知识文档"""

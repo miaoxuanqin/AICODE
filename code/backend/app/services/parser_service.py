@@ -142,7 +142,17 @@ class ParserService:
 
             with zipfile.ZipFile(file_path) as z:
                 if 'chunk.xhtml' in z.namelist():
-                    xhtml = z.read('chunk.xhtml').decode('utf-8')
+                    raw = z.read('chunk.xhtml')
+                    # 尝试多种编码，UTF-8优先，失败则尝试GBK
+                    xhtml = None
+                    for encoding in ('utf-8', 'gbk', 'gb2312', 'latin-1'):
+                        try:
+                            xhtml = raw.decode(encoding)
+                            break
+                        except UnicodeDecodeError:
+                            continue
+                    if xhtml is None:
+                        xhtml = raw.decode('utf-8', errors='replace')
                     # 解析HTML提取纯文本
                     return self._strip_html_tags(xhtml)
         except Exception:

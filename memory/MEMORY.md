@@ -2,8 +2,61 @@
 
 - [项目概述](project_overview.md) — 技术栈、架构、外部服务地址
 - [知识模块状态](knowledge_module_status.md) — 开发进度、已完成文件、待完成事项
-- [问答助手模块状态](qa_module_status.md) — 问答助手、执法助手、工程监管助手、图谱增强问答进度
+- [问答助手模块状态](qa_module_status.md) — 问答助手、执法助手、工程监管助手、图谱增强问答进度（已更新 2026-04-28）
 - [用户偏好](user_preferences.md) — 工作方式偏好、反馈指导
+
+## 文档更新 (2026-04-28 晚)
+
+### 新建文档
+
+- `08-项目进度/智能助手模块-进度--20260428.md` — 综合进度文档
+- `06-开发参考/知识模块-ES重建索引与WSL服务管理-开发参考--20260428.md` — ES重建索引问题 + WSL服务管理
+
+### 更新文档
+
+- `memory/knowledge_module_status.md` — 更新开发状态、待完成事项、ES问题详情
+- `08-项目进度/智能助手-问答助手-进度--20260428.md` — 更新
+- `08-项目进度/智能助手-执法智能助手-进度--20260428.md` — 更新
+- `08-项目进度/智能助手-工程监管助手-进度--20260428.md` — 更新
+- `08-项目进度/智能助手-图谱增强问答-进度--20260428.md` — 更新
+
+## 2026-04-28 (晚) Session 内容摘要
+
+### 问题修复
+
+1. **等待时可重复发送问题** — 四个页面统一修复
+   - 发送按钮增加 `|| isThinking` 条件
+   - 按钮文字变为"等待回答中..."
+   - 进度 15%-100% 时显示取消按钮
+   - 点击取消后移除消息、停止动画
+
+2. **删除知识时 Qdrant 未清理** — `search_service.delete_knowledge_index` 增加 Qdrant 删除
+
+3. **Word 文档 GBK 编码读取失败** — `parser_service._parse_docx_chunk` 增加多编码尝试
+
+4. **Neo4j 未启动时图谱问答无提示** — 前端增加 neo4jStatus 检查
+
+### ES 重建索引问题
+
+- **问题**：`reindex_es.py` 运行时 38 条知识全部失败
+- **错误**：`[1:1190] failed to parse field` 等 JSON 解析错误
+- **已尝试**：添加 `clean_for_json` 清理控制字符，仍失败
+- **建议**：使用 Python ES 客户端代替 curl，或进一步排查 JSON 序列化
+
+### WSL 服务管理
+
+- 创建 `06-开发参考/docker-services.service` systemd 服务
+- 实现 Docker 容器（redis/qdrant/elasticsearch/neo4j）随 WSL 自动启动
+
+### Neo4j 清理
+
+- `fix_neo4j.py` — 删除孤立节点（无 EXTRACTED_FROM 关系）
+- `check_neo4j.py` — 检查 Neo4j 状态
+
+### "第78条"幻觉问题
+
+- **结论**：确认为 LLM 幻觉，非数据问题
+- **证据**：MySQL/ES 检索结果中均无"第78条"
 
 ## 文档更新 (2026-04-28 下午)
 

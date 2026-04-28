@@ -148,7 +148,9 @@ export const graphApi = {
   // 提取实体
   extractEntities: (text) => request.get('/graph/entity/extract', { params: { q: text } }),
   // 构建图谱
-  buildGraph: (entities) => request.post('/graph/graph/build', entities)
+  buildGraph: (entities) => request.post('/graph/graph/build', entities),
+  // Neo4j 状态
+  neo4jStatus: () => request.get('/graph/neo4j/status')
 }
 
 export default request

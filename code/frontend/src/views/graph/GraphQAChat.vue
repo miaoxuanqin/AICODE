@@ -328,10 +328,9 @@
               @keydown.enter.ctrl="handleSend"
             />
             <div class="input-actions">
-              <span class="hint">按 Ctrl+Enter 发送</span>
               <el-button type="primary" @click="handleSend" :disabled="!inputMessage.trim() || isThinking">
-                <el-icon><Promotion /></el-icon>
-                发送
+                <el-icon v-if="!isThinking"><Promotion /></el-icon>
+                {{ isThinking ? '等待回答中...' : '发送' }}
               </el-button>
             </div>
           </div>
@@ -622,93 +621,10 @@ const renderMarkdown = (content) => {
   }
 }
 
-// 模拟图数据
-const mockGraphData = {
-  nodes: [
-    { id: 'q1', label: '脚手架坠落事故', type: 'question', x: 200, y: 50, description: '工地脚手架搭建不符合规范导致坠落事故', attributes: [{ key: '事故类型', value: '安全事故' }, { key: '严重程度', value: '重大' }] },
-    { id: 'n1', label: '安全生产管理条例', type: 'law', x: 80, y: 130, description: '建设工程安全生产管理条例', attributes: [{ key: '发文机关', value: '国务院' }, { key: '生效日期', value: '2004年2月1日' }] },
-    { id: 'n2', label: '第78条', type: 'article', x: 200, y: 130, description: '施工单位未按规定设置安全防护设施的处罚规定', attributes: [{ key: '罚款范围', value: '5万-10万元' }, { key: '情节严重', value: '10万-20万元' }] },
-    { id: 'n3', label: '2023年XX工地事故', type: 'case', x: 320, y: 130, description: '某工地脚手架坠落致2人死亡事故', attributes: [{ key: '发生时间', value: '2023年5月' }, { key: '处罚金额', value: '15万元' }] },
-    { id: 'n4', label: 'JGJ59安全标准', type: 'standard', x: 80, y: 230, description: '建筑施工安全检查标准', attributes: [{ key: '标准编号', value: 'JGJ59-2011' }, { key: '性质', value: '强制性标准' }] },
-    { id: 'n5', label: '行政处罚法', type: 'law', x: 200, y: 230, description: '中华人民共和国行政处罚法', attributes: [{ key: '发文机关', value: '全国人大' }, { key: '效力级别', value: '法律' }] },
-    { id: 'n6', label: '罚款15万元', type: 'penalty', x: 320, y: 230, description: '依据安全生产管理条例第78条的处罚决定', attributes: [{ key: '处罚对象', value: '施工单位' }, { key: '执行状态', value: '已执行' }] }
-  ],
-  edges: [
-    { id: 'e1', source: 'q1', target: 'n1', label: '涉及' },
-    { id: 'e2', source: 'n1', target: 'n2', label: '包含' },
-    { id: 'e3', source: 'n2', target: 'n6', label: '导致' },
-    { id: 'e4', source: 'q1', target: 'n3', label: '类似案例' },
-    { id: 'e5', source: 'n3', target: 'n6', label: '处罚依据' },
-    { id: 'e6', source: 'n4', target: 'n2', label: '支撑' },
-    { id: 'e7', source: 'n5', target: 'n6', label: '程序依据' }
-  ]
-}
 
-// 模拟推理链数据
-const mockReasoningChain = [
-  {
-    query: '脚手架坠落事故涉及哪些法规？',
-    result: '涉及《建设工程安全生产管理条例》',
-    entities: ['脚手架', '坠落', '事故', '安全', '生产']
-  },
-  {
-    query: '查找相关处罚条款？',
-    result: '《条例》第78条规定了处罚标准',
-    entities: ['第78条', '处罚', '罚款']
-  },
-  {
-    query: '查找类似案例？',
-    result: '2023年XX工地事故与本案高度相似',
-    entities: ['2023年', 'XX工地', '脚手架']
-  },
-  {
-    query: '综合法规和案例生成最终答案？',
-    result: '综合分析完成',
-    entities: ['处罚', '15万元', '已执行']
-  }
-]
 
-// 模拟回答数据
-const mockAnswer = `
-## 事故分析与处罚建议
 
-### 一、事故定性
-该脚手架坠落事故属于**安全生产责任事故**，根据《建设工程安全生产管理条例》相关规定，施工单位负主要责任。
 
-### 二、法律依据
-
-| 法规 | 条款 | 适用情形 |
-|-----|-----|---------|
-| 建设工程安全生产管理条例 | 第78条 | 未按规定设置安全防护设施 |
-| 建筑施工安全检查标准 | JGJ59-2011 | 安全防护措施标准 |
-| 行政处罚法 | 第32条 | 从轻或减轻情节 |
-
-### 三、处罚标准
-
-**一般情节**：罚款 **5-10万元**
-
-**情节严重**（如造成人员伤亡）：罚款 **10-20万元**
-
-### 四、类似案例参考
-
-**2023年XX工地脚手架坠落事故**
-- 事故原因：脚手架搭建不符合JGJ59标准
-- 处罚结果：罚款15万元
-- 借鉴意义：本案可参照此案例进行裁量
-
-### 五、处置建议
-
-1. **立即整改**：停工整改脚手架安全隐患
-2. **责任追究**：追究项目经理和安全员责任
-3. **行政处罚**：建议处以15万元罚款
-`
-
-const mockCitations = [
-  { id: 'n1', type: 'law', typeName: '法规', title: '建设工程安全生产管理条例' },
-  { id: 'n2', type: 'article', typeName: '条款', title: '第78条处罚规定' },
-  { id: 'n3', type: 'case', typeName: '案例', title: '2023年XX工地事故' },
-  { id: 'n5', type: 'law', typeName: '法规', title: '行政处罚法' }
-]
 
 // 根据问题动态生成图谱数据
 const generateDynamicGraphData = (question, reasoningChain) => {
@@ -972,16 +888,7 @@ const startThinkingAnimation = () => {
   return timer
 }
 
-// 生成模拟实体用于显示
-const generateMockEntities = (stepIdx) => {
-  const entitySets = [
-    ['脚手架', '坠落事故', '安全施工'],
-    ['安全生产管理条例', '第78条', '行政处罚法'],
-    ['关联法规', '处罚标准', '裁量基准'],
-    ['最终答案', '法律依据', '处罚建议']
-  ]
-  return entitySets[stepIdx] || []
-}
+
 
 // 发送消息
 const handleSend = async () => {
@@ -1132,8 +1039,17 @@ const cancelRequest = () => {
   }
 }
 
-onMounted(() => {
-  // 初始为空图谱，等待用户提问后才填充数据
+onMounted(async () => {
+  // 检查 Neo4j 状态
+  try {
+    const status = await graphApi.neo4jStatus()
+    if (!status.available) {
+      useNeo4j.value = false
+      ElMessage.warning('Neo4j 图谱服务未启动，已切换到普通推理模式')
+    }
+  } catch (e) {
+    useNeo4j.value = false
+  }
 })
 
 // 图谱数据变化的观察者 - 动态效果
