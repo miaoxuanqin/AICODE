@@ -301,7 +301,7 @@ def get_node_neighbors(
 
 @router.get("/explorer/search")
 def search_graph_nodes(
-    q: str = Query(..., min_length=1, description="搜索关键词"),
+    q: str = Query("", min_length=0, description="搜索关键词"),
     label: str = Query(None, description="按类型筛选"),
     limit: int = Query(20, ge=1, le=50, description="返回数量"),
     current_user = Depends(get_current_user)
@@ -312,7 +312,8 @@ def search_graph_nodes(
 
     try:
         neo4j = get_neo4j_service()
-        results = neo4j.search_nodes(keyword=q, label=label, limit=limit)
+        keyword = q if q else None
+        results = neo4j.search_nodes(keyword=keyword, label=label, limit=limit)
         return {"results": results, "query": q}
     except Exception as e:
         return {"error": str(e)}

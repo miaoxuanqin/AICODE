@@ -20,6 +20,16 @@
             <div class="graph-header">
               <span>图谱可视化</span>
               <div class="graph-controls">
+                <el-button size="small" @click="handleQuickAction('cases')" title="处罚案例">
+                  <el-icon><Document /></el-icon>
+                </el-button>
+                <el-button size="small" @click="handleQuickAction('laws')" title="相关法规">
+                  <el-icon><Folder /></el-icon>
+                </el-button>
+                <el-button size="small" @click="handleQuickAction('random')" title="随便看看">
+                  <el-icon><Refresh /></el-icon>
+                </el-button>
+                <el-divider direction="vertical" />
                 <el-button size="small" @click="resetView" title="重置视图">
                   <el-icon><RefreshRight /></el-icon>
                 </el-button>
@@ -37,10 +47,43 @@
           <div class="graph-container" ref="graphContainer">
             <!-- 图例 -->
             <div class="graph-legend">
-              <div v-for="type in nodeTypes" :key="type.label" class="legend-item" @click="toggleTypeFilter(type.label)">
-                <span class="legend-dot" :style="{ background: type.color }"></span>
-                <span>{{ type.name }}</span>
-                <span class="legend-count">({{ graphStats.by_type?.[type.label] || 0 }})</span>
+              <div
+                v-for="type in nodeTypes"
+                :key="type.label"
+                class="legend-item-wrapper"
+              >
+                <el-popover
+                  placement="right"
+                  :width="280"
+                  trigger="hover"
+                  @show="loadTypeExamples(type.label)"
+                >
+                  <template #reference>
+                    <div class="legend-item" @click.stop="handleLegendClick(type.label)">
+                      <span class="legend-dot" :style="{ background: type.color }"></span>
+                      <span>{{ type.name }}</span>
+                      <span class="legend-count">({{ graphStats.by_type?.[type.label] || 0 }})</span>
+                    </div>
+                  </template>
+                  <div class="legend-popover">
+                    <div class="popover-title">{{ type.name }}</div>
+                    <div class="popover-desc">{{ type.description }}</div>
+                    <el-divider style="margin: 8px 0" />
+                    <div class="popover-section">示例节点</div>
+                    <div v-if="typeExamples[type.label]?.length" class="popover-examples">
+                      <el-tag
+                        v-for="ex in typeExamples[type.label]"
+                        :key="ex.id"
+                        size="small"
+                        class="example-tag"
+                        @click="handleExampleClick(ex)"
+                      >
+                        {{ ex.name }}
+                      </el-tag>
+                    </div>
+                    <div v-else class="popover-empty">暂无示例</div>
+                  </div>
+                </el-popover>
               </div>
             </div>
 
@@ -64,6 +107,33 @@
               <el-icon :size="64"><Box /></el-icon>
               <p>暂无图谱数据</p>
               <p class="hint">请先上传知识文档，系统将自动抽取实体关系</p>
+            </div>
+
+            <!-- 引导探索面板 -->
+            <div v-if="showGuidePanel && !loading" class="guide-panel">
+              <div class="guide-title">
+                <el-icon><Guide /></el-icon>
+                <span>探索知识图谱</span>
+              </div>
+              <p class="guide-subtitle">输入关键词，或选择下面的示例问题开始探索</p>
+              <div class="guide-questions">
+                <el-button
+                  v-for="q in guideQuestions"
+                  :key="q.text"
+                  @click="handleGuideQuestion(q)"
+                  type="primary" plain
+                  class="guide-btn"
+                >
+                  {{ q.text }}
+                </el-button>
+              </div>
+              <div class="guide-tips">
+                <el-tag size="small" type="info">提示</el-tag>
+                <span>您可以搜索实体名称，或直接点击图例筛选特定类型的节点</span>
+              </div>
+              <el-button text @click="showGuidePanel = false" class="skip-btn">
+                跳过引导 →
+              </el-button>
             </div>
           </div>
 
@@ -98,6 +168,29 @@
             </el-select>
             <el-button @click="clearFilters" style="margin-left: 12px;">重置</el-button>
           </div>
+
+          <!-- 搜索结果面板 -->
+          <div class="search-results-inline" v-if="searchResults.length > 0">
+            <div class="results-header">
+              <span>搜索结果 ({{ searchResults.length }})</span>
+              <el-button text @click="searchResults = []" size="small">
+                <el-icon><Close /></el-icon>
+              </el-button>
+            </div>
+            <div class="search-results">
+              <div
+                v-for="result in searchResults"
+                :key="result.id"
+                class="search-result-item"
+                @click="handleSearchResultClick(result)"
+              >
+                <el-tag size="small" :style="{ background: getNodeColor(result.label), border: 'none', color: '#fff' }">
+                  {{ getNodeTypeName(result.label) }}
+                </el-tag>
+                <span class="result-name">{{ result.name }}</span>
+              </div>
+            </div>
+          </div>
         </el-card>
       </el-col>
 
@@ -114,13 +207,30 @@
             </div>
           </template>
           <div class="node-detail">
-            <div class="node-type-tag" :style="{ background: getNodeColor(selectedNode.label) }">
-              {{ getNodeTypeName(selectedNode.label) }}
+            <div class="node-type-tag" :style="{ background: getNodeColor(selectedNode.type || selectedNode.label) }">
+              {{ getNodeTypeName(selectedNode.type || selectedNode.label) }}
             </div>
             <div class="node-name">{{ selectedNode.name }}</div>
 
+            <!-- 操作按钮 -->
+            <div class="detail-actions">
+              <el-button type="primary" size="small" @click="viewNodeDetail">
+                <el-icon><Document /></el-icon>
+                查看详情
+              </el-button>
+              <el-button size="small" @click="expandNode(selectedNode.name)">
+                <el-icon><Plus /></el-icon>
+                展开邻居
+              </el-button>
+              <el-button size="small" @click="findSimilarNodes">
+                <el-icon><Search /></el-icon>
+                发现相似
+              </el-button>
+            </div>
+
+            <!-- 关联关系 -->
             <div class="detail-section">
-              <div class="section-title">关联关系</div>
+              <div class="section-title">关联关系 ({{ nodeRelations.length }})</div>
               <div v-if="nodeRelations.length > 0" class="relations-list">
                 <div
                   v-for="rel in nodeRelations"
@@ -136,11 +246,46 @@
               <div v-else class="empty-relations">暂无关联关系</div>
             </div>
 
-            <div class="detail-actions">
-              <el-button type="primary" size="small" @click="expandNode(selectedNode.name)">
-                <el-icon><Plus /></el-icon>
-                展开邻居
-              </el-button>
+            <!-- 相关推荐 -->
+            <div class="detail-section">
+              <div class="section-title">相关推荐</div>
+              <div v-if="relatedRecommendations.length > 0" class="recommendations-list">
+                <div
+                  v-for="rec in relatedRecommendations"
+                  :key="rec.id"
+                  class="recommendation-item"
+                  @click="loadNodeAndFocus(rec.id, rec.name)"
+                >
+                  <el-tag size="small" :style="{ background: getNodeColor(rec.label), border: 'none', color: '#fff' }">
+                    {{ getNodeTypeName(rec.label) }}
+                  </el-tag>
+                  <span class="rec-name">{{ rec.name }}</span>
+                </div>
+              </div>
+              <div v-else class="empty-recommendations">
+                <el-button text size="small" @click="loadRelatedRecommendations">
+                  点击加载相关推荐
+                </el-button>
+              </div>
+            </div>
+
+            <!-- 智能提示 -->
+            <div v-if="selectedNode && nodeRelations.length > 0" class="node-hint">
+              <div class="hint-title">
+                <el-icon><InfoFilled /></el-icon>
+                关联洞察
+              </div>
+              <div class="hint-content">
+                <div class="hint-stat">
+                  该<span style="font-weight: 600;">{{ getNodeTypeName(selectedNode.type || selectedNode.label) }}</span>关联了
+                  <span class="stat-num">{{ nodeRelations.length }}</span>个实体
+                </div>
+                <div class="hint-stat">
+                  涉及
+                  <span class="stat-num">{{ relatedTypesCount }}</span>
+                  种不同类型
+                </div>
+              </div>
             </div>
           </div>
         </el-card>
@@ -181,31 +326,6 @@
                 </div>
                 <span class="type-count">{{ graphStats.by_type?.[type.label] || 0 }}</span>
               </div>
-            </div>
-          </div>
-        </el-card>
-
-        <!-- 搜索结果面板 -->
-        <el-card class="search-results-card" v-if="searchResults.length > 0">
-          <template #header>
-            <div class="results-header">
-              <span>搜索结果</span>
-              <el-button text @click="searchResults = []">
-                <el-icon><Close /></el-icon>
-              </el-button>
-            </div>
-          </template>
-          <div class="search-results">
-            <div
-              v-for="result in searchResults"
-              :key="result.id"
-              class="search-result-item"
-              @click="handleSearchResultClick(result)"
-            >
-              <el-tag size="small" :style="{ background: getNodeColor(result.label), border: 'none', color: '#fff' }">
-                {{ getNodeTypeName(result.label) }}
-              </el-tag>
-              <span class="result-name">{{ result.name }}</span>
             </div>
           </div>
         </el-card>
@@ -303,24 +423,38 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, nextTick, watch, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   RefreshRight, FullScreen, Guide, Loading, Connection,
-  Close, Plus, Search, Box
+  Close, Plus, Search, Box, Document, Folder, Refresh, InfoFilled
 } from '@element-plus/icons-vue'
 import { graphApi } from '@/api'
 
+const router = useRouter()
+
 // 节点类型配置
 const nodeTypes = [
-  { label: 'Law', name: '法规', color: '#409eff' },
-  { label: 'Article', name: '条款', color: '#1a3a6b' },
-  { label: 'Case', name: '案例', color: '#67c23a' },
-  { label: 'Penalty', name: '处罚', color: '#f56c6c' },
-  { label: 'Standard', name: '标准', color: '#909399' },
-  { label: 'Subject', name: '主体', color: '#e6a23c' },
-  { label: 'Behavior', name: '行为', color: '#9b59b6' }
+  { label: 'Law', name: '法规', color: '#409eff', description: '国家或地方发布的政策文件、条例、规定等' },
+  { label: 'Article', name: '条款', color: '#1a3a6b', description: '法规中的具体条文内容，包括章节条款' },
+  { label: 'Case', name: '案例', color: '#67c23a', description: '实际发生的行政处罚案例，记录违法事实和处罚结果' },
+  { label: 'Penalty', name: '处罚', color: '#f56c6c', description: '针对违法行为的处罚决定，包括罚款、吊销等' },
+  { label: 'Standard', name: '标准', color: '#909399', description: '行业技术标准、规范，是合规参考的重要依据' },
+  { label: 'Subject', name: '主体', color: '#e6a23c', description: '涉及的个人或单位，如企业、法人、责任人' },
+  { label: 'Behavior', name: '行为', color: '#9b59b6', description: '违法行为或具体行为描述' }
 ]
+
+// 类型示例数据
+const typeExamples = ref({
+  Law: [],
+  Article: [],
+  Case: [],
+  Penalty: [],
+  Standard: [],
+  Subject: [],
+  Behavior: []
+})
 
 // 关系类型映射
 const relationNames = {
@@ -334,9 +468,106 @@ const relationNames = {
   'EXTRACTED_FROM': '抽取自'
 }
 
+// 引导问题配置
+const guideQuestions = [
+  { text: '查找海南省住建领域的处罚案例', search: '海南', type: 'Case' },
+  { text: '了解某法规的引用关系', search: '法规', type: 'Law' },
+  { text: '某主体的关联行为有哪些', search: '', type: 'Subject' },
+  { text: '查找建筑节能相关标准', search: '建筑节能', type: 'Standard' },
+  { text: '了解处罚决定的触发条件', search: '', type: 'Penalty' }
+]
+
+// 处理引导问题点击
+const handleGuideQuestion = (q) => {
+  searchKeyword.value = q.search
+  if (q.type) {
+    typeFilter.value = [q.type]
+  }
+  showGuidePanel.value = false
+  handleSearch()
+}
+
+// 加载类型示例
+const loadTypeExamples = async (label) => {
+  if (typeExamples.value[label]?.length > 0) return
+  try {
+    const res = await graphApi.searchNodes('', label, 3)
+    if (res.results) {
+      typeExamples.value[label] = res.results
+    }
+  } catch (error) {
+    console.error('加载示例失败:', error)
+  }
+}
+
+// 点击示例节点
+const handleExampleClick = (example) => {
+  searchKeyword.value = example.name
+  showGuidePanel.value = false
+  handleSearch()
+}
+
+// 快捷操作处理
+const handleQuickAction = async (action) => {
+  console.log('handleQuickAction 被调用, action:', action)
+  showGuidePanel.value = false
+  loading.value = true
+  try {
+    let results = []
+    switch (action) {
+      case 'cases':
+        // 获取处罚案例
+        const casesRes = await graphApi.searchNodes('', 'Case', 20)
+        results = casesRes.results || []
+        break
+      case 'laws':
+        // 获取法规
+        console.log('开始获取法规...')
+        try {
+          const lawsRes = await graphApi.searchNodes('', 'Law', 20)
+          console.log('法规搜索结果:', lawsRes)
+          results = lawsRes.results || []
+        } catch (e) {
+          console.error('法规搜索失败:', e)
+          results = []
+        }
+        break
+      case 'random':
+        // 随机获取中心节点
+        const centerRes = await graphApi.centerNodes(30)
+        results = (centerRes.nodes || []).map(n => ({ id: n.id, name: n.name, label: n.label }))
+        break
+    }
+    if (results.length > 0) {
+      console.log('准备加载到图谱的节点:', results)
+      await loadResultsToGraph(results)
+      ElMessage.success(`已加载 ${results.length} 个实体`)
+    } else {
+      ElMessage.warning('暂无数据')
+    }
+  } catch (error) {
+    console.error('快捷操作失败:', error)
+    ElMessage.error('加载失败: ' + (error.message || '未知错误'))
+  } finally {
+    loading.value = false
+  }
+}
+
+// 计算关联类型数
+const relatedTypesCount = computed(() => {
+  if (!selectedNode.value || !nodeRelations.value.length) return 0
+  const types = new Set()
+  nodeRelations.value.forEach(rel => {
+    if (rel.target_label) types.add(rel.target_label)
+    if (rel.source_label) types.add(rel.source_label)
+  })
+  return types.size
+})
+
 // 图数据
 const nodes = ref([])
 const edges = ref([])
+const showGuidePanel = ref(true)
 const graphStats = reactive({
   available: false,
   total_nodes: 0,
@@ -351,6 +582,7 @@ const typeFilter = ref([])
 const searchResults = ref([])
 const selectedNode = ref(null)
 const nodeRelations = ref([])
+const relatedRecommendations = ref([])
 
 // 图谱实例
 let network = null
@@ -390,6 +622,35 @@ const getBarWidth = (count) => {
   return Math.min(100, (count / graphStats.total_nodes) * 100)
 }
 
+// 监听类型筛选变化
+watch(typeFilter, (newFilter) => {
+  if (network && nodes.value.length > 0) {
+    const filteredIds = new Set(newFilter.length > 0
+      ? nodes.value.filter(n => newFilter.includes(n.label)).map(n => n.id)
+      : nodes.value.map(n => n.id))
+
+    // 通过设置 opacity 来过滤
+    const allNodes = network.body.data.nodes.get()
+    allNodes.forEach(node => {
+      network.body.data.nodes.update({
+        id: node.id,
+        hidden: filteredIds.size > 0 && !filteredIds.has(node.id)
+      })
+    })
+
+    // 同步过滤边
+    const allEdges = network.body.data.edges.get()
+    allEdges.forEach(edge => {
+      const sourceHidden = network.body.data.nodes.get(edge.from)?.hidden
+      const targetHidden = network.body.data.nodes.get(edge.to)?.hidden
+      network.body.data.edges.update({
+        id: edge.id,
+        hidden: filteredIds.size > 0 && (sourceHidden || targetHidden)
+      })
+    })
+  }
+})
+
 // 初始化图谱
 const initGraph = async () => {
   loading.value = true
@@ -408,13 +669,16 @@ const initGraph = async () => {
     // 获取中心节点
     const centerRes = await graphApi.centerNodes(50)
     if (centerRes.nodes) {
-      nodes.value = centerRes.nodes.map(n => ({
-        id: n.id,
-        label: n.name,
-        title: n.name,
-        type: n.label,
-        degree: n.degree || 0
-      }))
+      nodes.value = centerRes.nodes
+        .filter(n => n.name) // 过滤无名称的节点
+        .map(n => ({
+          id: n.id,
+          name: n.name,
+          label: n.label || n.name,
+          title: n.name,
+          type: n.label || '',
+          degree: n.degree || 0
+        }))
     }
     if (centerRes.edges) {
       edges.value = centerRes.edges.map(e => ({
@@ -438,27 +702,39 @@ const initGraph = async () => {
 
 // 渲染图谱
 const renderNetwork = () => {
+  console.log('renderNetwork 被调用, 节点数:', nodes.value.length)
   if (!networkRef.value || typeof window === 'undefined') return
 
   // 动态导入 vis-network
-  import('vis-network').then(({ Network, DataSet }) => {
+  import('vis-network').then(({ Network }) => {
+  import('vis-data').then(({ DataSet }) => {
     if (!networkRef.value) return
 
+    // 去重节点（同一节点可能出现在多条边中）
+    const uniqueNodes = Array.from(
+      new Map(nodes.value.map(n => [n.id, n])).values()
+    )
+
     // 转换数据格式
-    const visNodes = new DataSet(nodes.value.map(n => ({
+    const visNodes = new DataSet(uniqueNodes.map(n => ({
       id: n.id,
-      label: n.label.length > 15 ? n.label.slice(0, 15) + '...' : n.label,
-      title: n.title,
+      label: (n.name || n.label || '').length > 15 ? (n.name || n.label || '').slice(0, 15) + '...' : (n.name || n.label || ''),
+      title: n.title || n.name || n.label,
       color: {
         background: getNodeColor(n.type),
         border: '#ffffff',
         highlight: { background: getNodeColor(n.type), border: '#409eff' }
       },
-      font: { color: '#ffffff', size: 12 },
+      font: { color: '#ffffff', size: 12, strokeWidth: 2, strokeColor: '#000000' },
       type: n.type
     })))
 
-    const visEdges = new DataSet(edges.value.map(e => ({
+    // 去重边
+    const uniqueEdges = Array.from(
+      new Map(edges.value.map(e => [e.id, e])).values()
+    )
+
+    const visEdges = new DataSet(uniqueEdges.map(e => ({
       id: e.id,
       from: e.from,
       to: e.to,
@@ -488,6 +764,10 @@ const renderNetwork = () => {
         if (node) {
           selectNode(node)
         }
+      } else if (params.edges.length > 0) {
+        // 点击边，高亮显示引用路径
+        const edgeId = params.edges[0]
+        highlightEdgePath(edgeId)
       }
     })
 
@@ -496,25 +776,171 @@ const renderNetwork = () => {
         const nodeId = params.nodes[0]
         const node = nodes.value.find(n => n.id === nodeId)
         if (node) {
-          expandNode(node.label)
+          expandNode(node.name || node.label)
         }
       }
     })
+
+    // 鼠标悬停在边上时显示关系信息
+    network.on('hoverEdge', (params) => {
+      const edge = edges.value.find(e => e.id === params.edge)
+      if (edge) {
+        network.body.container.style.cursor = 'pointer'
+      }
+    })
+
+    network.on('blurEdge', (params) => {
+      network.body.container.style.cursor = 'default'
+    })
   })
+  })
+}
+
+// 高亮边及其关联的节点
+const highlightEdgePath = (edgeId) => {
+  if (!network) return
+
+  const edge = edges.value.find(e => e.id === edgeId)
+  if (!edge) return
+
+  // 获取边关联的两个节点ID
+  const connectedNodeIds = [edge.from, edge.to]
+
+  // 重置所有节点和边的样式
+  const allNodes = network.body.data.nodes.get()
+  const allEdges = network.body.data.edges.get()
+
+  allNodes.forEach(node => {
+    network.body.data.nodes.update({
+      id: node.id,
+      color: {
+        background: getNodeColor(node.type),
+        border: '#ffffff',
+        highlight: { background: getNodeColor(node.type), border: '#409eff' }
+      },
+      borderWidth: 1
+    })
+  })
+
+  allEdges.forEach(e => {
+    network.body.data.edges.update({
+      id: e.id,
+      color: { color: '#7b8db5', highlight: '#409eff' },
+      width: 1
+    })
+  })
+
+  // 高亮当前边和关联节点
+  network.body.data.edges.update({
+    id: edgeId,
+    color: { color: '#409eff', highlight: '#67c23a' },
+    width: 3
+  })
+
+  connectedNodeIds.forEach(nodeId => {
+    network.body.data.nodes.update({
+      id: nodeId,
+      borderWidth: 3,
+      color: {
+        background: getNodeColor(network.body.data.nodes.get(nodeId)?.type),
+        border: '#409eff',
+        highlight: { background: getNodeColor(network.body.data.nodes.get(nodeId)?.type), border: '#67c23a' }
+      }
+    })
+  })
+
+  // 2秒后恢复
+  setTimeout(() => {
+    allEdges.forEach(e => {
+      network.body.data.edges.update({
+        id: e.id,
+        color: { color: '#7b8db5', highlight: '#409eff' },
+        width: 1
+      })
+    })
+    connectedNodeIds.forEach(nodeId => {
+      network.body.data.nodes.update({
+        id: nodeId,
+        borderWidth: 1
+      })
+    })
+  }, 2000)
 }
 
 // 选择节点
 const selectNode = async (node) => {
+  if (!node) return
   selectedNode.value = node
   nodeRelations.value = []
 
+  const nodeName = node.name || node.label || node.title
+  if (!nodeName) {
+    console.warn('选择节点失败: 节点名称为空', node)
+    return
+  }
+
   try {
-    const res = await graphApi.nodeRelations(node.name)
+    const res = await graphApi.nodeRelations(nodeName)
     if (res.relations) {
       nodeRelations.value = res.relations
     }
   } catch (error) {
     console.error('获取节点关系失败:', error)
+  }
+}
+
+// 查看节点详情（跳转到知识详情页）
+const viewNodeDetail = () => {
+  if (!selectedNode.value || !selectedNode.value.id) {
+    ElMessage.warning('节点信息不完整')
+    return
+  }
+  router.push(`/knowledge/detail/${selectedNode.value.id}`)
+}
+
+// 查找相似节点
+const findSimilarNodes = async () => {
+  if (!selectedNode.value) return
+  loading.value = true
+  try {
+    const res = await graphApi.searchNodes(selectedNode.value.name, null, 10)
+    if (res.results?.length > 0) {
+      const similar = res.results.filter(r => r.id !== selectedNode.value.id).slice(0, 5)
+      if (similar.length > 0) {
+        await loadResultsToGraph(similar)
+        ElMessage.success(`已加载 ${similar.length} 个相似实体`)
+      } else {
+        ElMessage.info('没有找到相似实体')
+      }
+    } else {
+      ElMessage.info('没有找到相似实体')
+    }
+  } catch (error) {
+    console.error('查找相似节点失败:', error)
+    ElMessage.error('查找失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+// 加载相关推荐
+const loadRelatedRecommendations = async () => {
+  if (!selectedNode.value) return
+  try {
+    const res = await graphApi.neighbors(selectedNode.value.name, 2)
+    if (res.nodes) {
+      // 获取二级邻居作为推荐
+      const recommendations = res.nodes
+        .filter(n => n.id !== selectedNode.value.id)
+        .slice(0, 5)
+        .map(n => ({ id: n.id, name: n.name, label: n.label }))
+      relatedRecommendations.value = recommendations
+      if (recommendations.length === 0) {
+        ElMessage.info('暂无相关推荐')
+      }
+    }
+  } catch (error) {
+    console.error('加载相关推荐失败:', error)
   }
 }
 
@@ -528,11 +954,13 @@ const expandNode = async (nodeName) => {
       const existingIds = new Set(nodes.value.map(n => n.id))
       const newNodes = res.nodes.filter(n => !existingIds.has(n.id))
       newNodes.forEach(n => {
+        if (!n.name) return // 跳过无名称的节点
         nodes.value.push({
           id: n.id,
-          label: n.name,
-          title: n.name,
-          type: n.label,
+          name: n.name,
+          label: n.label || n.name,
+          title: n.title || n.name,
+          type: n.label || '',
           degree: 0
         })
       })
@@ -589,11 +1017,87 @@ const handleSearch = async () => {
       searchResults.value = res.results
       if (res.results.length === 0) {
         ElMessage.info('未找到匹配的实体')
+      } else if (res.results.length > 0 && res.results.length <= 5) {
+        // 少量结果，直接加载到图谱
+        await loadResultsToGraph(res.results)
+        ElMessage.success(`已加载 ${res.results.length} 个相关实体到图谱`)
       }
     }
   } catch (error) {
     console.error('搜索失败:', error)
   }
+}
+
+// 加载搜索结果到图谱
+const loadResultsToGraph = async (results) => {
+  console.log('loadResultsToGraph 被调用, 结果数量:', results.length)
+  // 先清空当前图谱
+  nodes.value = []
+  edges.value = []
+
+  const newNodes = []
+  const newEdges = []
+  const nodeIds = new Set()
+
+  for (const result of results) {
+    console.log('处理节点:', result)
+    if (!nodeIds.has(result.id) && result.name) {
+      newNodes.push({
+        id: result.id,
+        name: result.name,
+        label: result.label || result.name,
+        title: result.name,
+        type: result.label || '',
+        degree: 0
+      })
+      nodeIds.add(result.id)
+    }
+
+    // 获取邻居节点
+    try {
+      const neighbors = await graphApi.neighbors(result.name, 1)
+      console.log(`节点 ${result.name} 的邻居:`, neighbors)
+      if (neighbors.nodes) {
+        for (const n of neighbors.nodes) {
+          if (!nodeIds.has(n.id) && n.name) {
+            newNodes.push({
+              id: n.id,
+              name: n.name,
+              label: n.label || n.name,
+              title: n.name,
+              type: n.label || '',
+              degree: 0
+            })
+            nodeIds.add(n.id)
+          }
+        }
+      }
+      if (neighbors.edges) {
+        for (const e of neighbors.edges) {
+          newEdges.push({
+            id: e.id,
+            from: e.source,
+            to: e.target,
+            label: getRelationName(e.type)
+          })
+        }
+      }
+    } catch (e) {
+      console.error('获取邻居失败:', e)
+    }
+  }
+
+  nodes.value = newNodes
+  edges.value = newEdges
+  console.log('设置后的节点:', nodes.value.length, '边:', edges.value.length)
+
+  // 等待 DOM 更新后渲染
+  await nextTick()
+  if (network) {
+    network.destroy()
+    network = null
+  }
+  renderNetwork()
 }
 
 // 类型筛选
@@ -633,11 +1137,13 @@ const loadNodeAndFocus = async (nodeId, nodeName) => {
     if (res.nodes) {
       const newNodes = res.nodes.filter(n => !nodes.value.find(existing => existing.id === n.id))
       newNodes.forEach(n => {
+        if (!n.name) return // 跳过无名称的节点
         nodes.value.push({
           id: n.id,
-          label: n.name,
-          title: n.name,
-          type: n.label,
+          name: n.name,
+          label: n.label || n.name,
+          title: n.title || n.name,
+          type: n.label || '',
           degree: 0
         })
       })
@@ -685,13 +1191,36 @@ const handleRelationClick = (rel) => {
   }
 }
 
+// 图例点击处理
+const handleLegendClick = async (typeLabel) => {
+  console.log('handleLegendClick 被调用, typeLabel:', typeLabel)
+  ElMessage.info(`正在加载${typeLabel}类型节点...`)
+  await toggleTypeFilter(typeLabel)
+}
+
 // 切换类型过滤
-const toggleTypeFilter = (type) => {
-  const idx = typeFilter.value.indexOf(type)
-  if (idx > -1) {
-    typeFilter.value.splice(idx, 1)
-  } else {
-    typeFilter.value.push(type)
+const toggleTypeFilter = async (type) => {
+  console.log('toggleTypeFilter 被调用, type:', type)
+  // 点击图例时，直接加载该类型的前20个节点
+  console.log('准备调用 searchNodes API')
+  try {
+    const res = await graphApi.searchNodes('', type, 20)
+    console.log('searchNodes 返回:', res)
+    if (res.results?.length > 0) {
+      console.log('准备调用 loadResultsToGraph')
+      await loadResultsToGraph(res.results)
+      // 保持该类型选中
+      typeFilter.value = [type]
+      return
+    } else {
+      console.log('没有搜索结果')
+      ElMessage.warning('暂无数据')
+      return
+    }
+  } catch (e) {
+    console.error('加载类型节点失败:', e)
+    ElMessage.error('加载失败')
+    return
   }
 }
 
@@ -883,12 +1412,191 @@ onUnmounted(() => {
   color: #c0c4cc;
 }
 
+/* 引导探索面板 */
+.guide-panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  border-radius: 16px;
+  padding: 32px 40px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  z-index: 100;
+  max-width: 500px;
+}
+
+.guide-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 8px;
+}
+
+.guide-subtitle {
+  color: #909399;
+  margin: 0 0 20px 0;
+}
+
+.guide-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.guide-btn {
+  width: 100%;
+  justify-content: flex-start;
+  padding-left: 16px;
+}
+
+.guide-tips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #f5f7fa;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #606266;
+}
+
+.skip-btn {
+  color: #909399;
+  font-size: 13px;
+}
+
+.skip-btn:hover {
+  color: #409eff;
+}
+
+/* 图例 popover */
+.legend-popover {
+  padding: 4px 0;
+}
+
+.popover-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: #303133;
+  margin-bottom: 4px;
+}
+
+.popover-desc {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.5;
+}
+
+.popover-section {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 8px;
+}
+
+.popover-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.example-tag {
+  cursor: pointer;
+}
+
+.example-tag:hover {
+  opacity: 0.8;
+}
+
+.popover-empty {
+  font-size: 12px;
+  color: #c0c4cc;
+}
+
+/* 节点详情智能提示 */
+.node-hint {
+  background: #ecf5ff;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.hint-title {
+  font-size: 12px;
+  color: #409eff;
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.hint-content {
+  font-size: 13px;
+  color: #606266;
+}
+
+.hint-stat {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.hint-stat .stat-num {
+  font-weight: 600;
+  color: #409eff;
+}
+
+/* 快捷入口 */
+.quick-actions {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 10;
+}
+
+.quick-action-btn {
+  width: 120px;
+  justify-content: flex-start;
+  padding-left: 12px;
+}
+
 .search-toolbar {
   display: flex;
   align-items: center;
   padding: 12px 0;
   border-top: 1px solid #e4e7ed;
   margin-top: 12px;
+}
+
+.search-results-inline {
+  border-top: 1px solid #e4e7ed;
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.search-results-inline .results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.search-results-inline .search-results {
+  max-height: 200px;
+  overflow-y: auto;
 }
 
 /* 节点详情面板 */
@@ -974,8 +1682,43 @@ onUnmounted(() => {
   padding: 16px;
 }
 
+.empty-recommendations {
+  text-align: center;
+  padding: 8px;
+}
+
+.recommendations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recommendation-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.recommendation-item:hover {
+  background: #e4e7ed;
+}
+
+.rec-name {
+  font-size: 13px;
+  color: #303133;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .detail-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding-top: 12px;
   border-top: 1px solid #e4e7ed;

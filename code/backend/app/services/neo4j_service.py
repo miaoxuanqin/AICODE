@@ -13,6 +13,9 @@ from app.config import get_settings
 
 settings = get_settings()
 
+# Neo4j driver availability flag
+NEO4J_AVAILABLE = True
+
 
 class Neo4jNodeNotFoundError(Exception):
     """节点不存在"""
@@ -757,8 +760,8 @@ class Neo4jService:
         # 先获取度数最高的节点
         nodes_query = """
         MATCH (n)
-        WHERE size((n)--())) > 0
-        WITH n, size((n)--()) AS degree
+        WHERE size([(n)--() | 1]) > 0
+        WITH n, size([(n)--() | 1]) AS degree
         ORDER BY degree DESC
         LIMIT $limit
         RETURN n, degree
@@ -788,7 +791,7 @@ class Neo4jService:
 
                 edges_query = """
                 MATCH (a)-[r]-(b)
-                WHERE a.name IN $node_names AND b.name IN $node_names
+                WHERE a.name IN $node_names
                 RETURN a, b, type(r) AS rel_type, id(r) AS rel_id
                 """
 
@@ -867,7 +870,7 @@ class Neo4jService:
                             "id": str(rel.id),
                             "source": center_id,
                             "target": neighbor_id,
-                            "type": type(rel).__name__
+                            "type": rel.type
                         })
 
                     return {"nodes": list(node_map.values()), "edges": edges_list}
@@ -900,29 +903,41 @@ class Neo4jService:
             print(f"get_neighbors 失败: {e}")
             return {"nodes": [], "edges": []}
 
-    def search_nodes(self, keyword: str, label: str = None, limit: int = 20) -> List[Dict[str, Any]]:
+    def search_nodes(self, keyword: str = None, label: str = None, limit: int = 20) -> List[Dict[str, Any]]:
         """
         搜索节点
 
         Args:
-            keyword: 搜索关键词
+            keyword: 搜索关键词（可选，为空时返回指定标签的节点）
             label: 可选，按类型筛选
             limit: 返回数量
 
         Returns:
             匹配的节点列表
         """
-        if label:
+        if keyword and label:
             query = f"""
             MATCH (n:{label})
             WHERE n.name CONTAINS $keyword
             RETURN n, labels(n)[0] AS label
             LIMIT $limit
             """
-        else:
+        elif keyword:
             query = """
             MATCH (n)
             WHERE n.name CONTAINS $keyword
+            RETURN n, labels(n)[0] AS label
+            LIMIT $limit
+            """
+        elif label:
+            query = f"""
+            MATCH (n:{label})
+            RETURN n, labels(n)[0] AS label
+            LIMIT $limit
+            """
+        else:
+            query = """
+            MATCH (n)
             RETURN n, labels(n)[0] AS label
             LIMIT $limit
             """
@@ -935,7 +950,7 @@ class Neo4jService:
                         "id": str(record["n"].id),
                         "name": record["n"].get("name", ""),
                         "label": record["label"],
-                        "matched_on": "name"
+                        "matched_on": "name" if keyword else None
                     }
                     for record in result
                 ]

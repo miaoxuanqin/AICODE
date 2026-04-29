@@ -8,7 +8,7 @@ lastUpdated: 2026-04-28
 
 # 知识管理模块开发状态
 
-> 最后更新：2026-04-28（本次会话更新）
+> 最后更新：2026-04-29（本次会话更新）
 
 ## 开发进度
 
@@ -21,6 +21,7 @@ lastUpdated: 2026-04-28
 | 工程监管助手 | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
 | 图谱增强问答 | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
 | Neo4j 集成 | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
+| 图谱浏览功能 | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
 
 ---
 
@@ -68,6 +69,7 @@ lastUpdated: 2026-04-28
 | `src/views/assistant/LawAssistant.vue` | 执法智能助手 |
 | `src/views/assistant/SuperviseAssistant.vue` | 工程监管助手 |
 | `src/views/graph/GraphQAChat.vue` | 图谱增强问答页面 |
+| `src/views/graph/GraphExplorer.vue` | 图谱浏览功能页面 |
 
 ---
 
@@ -167,3 +169,81 @@ lastUpdated: 2026-04-28
 | 文档 | 路径 |
 |------|------|
 | 图谱上下文增强详细设计 | `04-功能详细设计/智能助手-图谱增强问答-图谱上下文增强-详细设计--20260428.md` |
+
+## 八、2026-04-29 Session 更新
+
+### 8.1 图谱浏览功能交互优化
+
+| 功能 | 说明 | 文件 |
+|------|------|------|
+| 引导探索面板 | 显示示例问题按钮 | GraphExplorer.vue |
+| 图例交互增强 | 悬停显示类型说明和示例 | GraphExplorer.vue |
+| 搜索图谱联动 | 少量结果直接加载到图谱 | GraphExplorer.vue |
+| 智能提示 | 选中节点显示关联统计 | GraphExplorer.vue |
+| 快捷入口 | 处罚案例/相关法规/随便看看 | GraphExplorer.vue |
+
+### 8.2 Bug 修复
+
+| 问题 | 文件 | 修复 |
+|------|------|------|
+| NEO4J_AVAILABLE 缺失 | neo4j_service.py | 添加 NEO4J_AVAILABLE = True |
+| Neo4j 5.x 语法不兼容 | neo4j_service.py | 改用 `size([(n)--() | 1])` |
+| DataSet 去重错误 | GraphExplorer.vue | 渲染前对 nodes/edges 去重 |
+| 字体看不清 | GraphExplorer.vue | 添加黑色描边 strokeWidth: 2 |
+| 模板语法错误 | GraphExplorer.vue | 重构 el-popover 结构 |
+
+### 8.3 项目启动脚本
+
+| 文件 | 说明 |
+|------|------|
+| code/start-dev.bat | Windows 启动脚本 |
+| code/start-dev.sh | Linux/Mac 启动脚本 |
+| 06-开发参考/01-开发环境配置.md | 新增第11节启动脚本说明 |
+
+### 8.4 图谱数据状态
+
+- **Neo4j 连接**：正常
+- **节点数量**：825 个
+- **边数量**：1352 条
+- **后端端口**：8001（8000 被占用）
+
+## 九、2026-04-29 Session 增强更新
+
+### 9.1 图谱浏览功能增强
+
+| 功能 | 说明 | 文件 |
+|------|------|------|
+| 节点详情面板增强 | 查看详情/展开邻居/发现相似按钮 | GraphExplorer.vue |
+| 相关推荐 | 显示二级邻居作为推荐 | GraphExplorer.vue |
+| 边交互功能 | 点击边高亮路径 | GraphExplorer.vue |
+| 关联关系点击 | 点击关联项跳转到对应节点 | GraphExplorer.vue |
+| 图例点击加载 | 点击图例自动加载该类型节点 | GraphExplorer.vue |
+
+### 9.2 UI 布局调整
+
+| 调整项 | 原位置 | 新位置 |
+|--------|--------|--------|
+| 快捷按钮 | 右下角 absolute | 右上角控制区 |
+| 搜索结果 | 右侧列独立卡片 | 搜索框下方内联 |
+
+### 9.3 Bug 修复
+
+| 问题 | 文件 | 修复 |
+|------|------|------|
+| handleRelationClick 重复定义 | GraphExplorer.vue | 删除重复定义 |
+| 节点名称为空 | GraphExplorer.vue | 统一使用 name/label/title 映射 |
+| 边字段映射错误 | GraphExplorer.vue | 统一使用 source/target |
+| 双击展开邻居字段错误 | GraphExplorer.vue | node.label → node.name |
+
+### 9.4 新增文档
+
+| 文档 | 路径 |
+|------|------|
+| 图谱浏览功能增强-详细设计 | `04-功能详细设计/知识浏览-知识图谱-图谱浏览功能增强-详细设计--20260429.md` |
+| 图谱浏览功能增强-进度 | `08-项目进度/知识浏览-知识图谱-图谱浏览功能增强-进度--20260429.md` |
+
+### 9.5 后端修改
+
+| 修改项 | 文件 | 说明 |
+|--------|------|------|
+| get_neighbors 边类型 | neo4j_service.py | `type(rel).__name__` → `rel.type` |
