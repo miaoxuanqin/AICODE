@@ -1,1207 +1,1208 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>知识管理 - 新版原型</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/element-plus@2.4.4/dist/index.css">
-  <script src="https://cdn.jsdelivr.net/npm/vue@3.3.11/dist/vue.global.prod.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/element-plus@2.4.4/dist/index.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@element-plus/icons-vue@2.3.1/dist/index.iife.min.js"></script>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'PingFang SC', 'Microsoft YaHei', -apple-system, sans-serif;
-      background: #f5f7fa;
-      min-height: 100vh;
-    }
-    .app-container { display: flex; }
-    .sidebar {
-      width: 220px;
-      background: linear-gradient(180deg, #1a3a6b 0%, #0d1f3c 100%);
-      min-height: 100vh;
-      padding: 20px 0;
-      color: #fff;
-    }
-    .logo {
-      padding: 0 20px 30px;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
-      margin-bottom: 20px;
-    }
-    .logo h1 { font-size: 18px; font-weight: 600; }
-    .logo span { font-size: 12px; opacity: 0.6; }
-    .nav-item {
-      padding: 12px 20px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      transition: all 0.2s;
-      font-size: 14px;
-    }
-    .nav-item:hover { background: rgba(255,255,255,0.1); }
-    .nav-item.active {
-      background: rgba(64,158,255,0.3);
-      border-left: 3px solid #409eff;
-    }
-    .nav-item svg { width: 18px; height: 18px; }
-    .main-content {
-      flex: 1;
-      padding: 24px;
-      overflow-x: hidden;
-    }
-    .page-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 24px;
-    }
-    .page-title { font-size: 24px; font-weight: 600; color: #1a3a6b; }
-    .header-actions { display: flex; gap: 12px; }
-    .btn-primary {
-      background: #409eff;
-      color: #fff;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.2s;
-    }
-    .btn-primary:hover { background: #66b1ff; transform: translateY(-1px); }
-    .btn-secondary {
-      background: #fff;
-      color: #606266;
-      border: 1px solid #dcdfe6;
-      padding: 10px 20px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.2s;
-    }
-    .btn-secondary:hover { border-color: #409eff; color: #409eff; }
-    .filter-card {
-      background: #fff;
-      border-radius: 12px;
-      padding: 20px;
-      margin-bottom: 20px;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-    }
-    .filter-row {
-      display: flex;
-      gap: 16px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .filter-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .filter-label { font-size: 14px; color: #606266; white-space: nowrap; }
-    .filter-select {
-      padding: 8px 32px 8px 12px;
-      border: 1px solid #dcdfe6;
-      border-radius: 6px;
-      font-size: 14px;
-      min-width: 140px;
-      background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23606060' d='M2 4l4 4 4-4'/%3E%3C/svg%3E") no-repeat right 10px center;
-      cursor: pointer;
-      appearance: none;
-    }
-    .filter-select:focus { outline: none; border-color: #409eff; }
-    .search-input {
-      padding: 8px 12px 8px 36px;
-      border: 1px solid #dcdfe6;
-      border-radius: 6px;
-      font-size: 14px;
-      width: 240px;
-      background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23909090' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E") no-repeat left 10px center;
-    }
-    .search-input:focus { outline: none; border-color: #409eff; }
-    .filter-stats {
-      margin-left: auto;
-      font-size: 13px;
-      color: #909399;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-    .stat-item { display: flex; align-items: center; gap: 4px; }
-    .stat-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-    }
-    .stat-dot.es { background: #67c23a; }
-    .stat-dot.vector { background: #e6a23c; }
-    .stat-dot.graph { background: #909eff; }
-    .knowledge-table {
-      background: #fff;
-      border-radius: 12px;
-      overflow: hidden;
-      box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-    }
-    .table-header {
-      display: grid;
-      grid-template-columns: 2fr 100px 100px 200px 120px;
-      padding: 14px 20px;
-      background: #f5f7fa;
-      font-size: 13px;
-      font-weight: 600;
-      color: #606266;
-      border-bottom: 1px solid #ebeef5;
-    }
-    .table-row {
-      display: grid;
-      grid-template-columns: 2fr 100px 100px 200px 120px;
-      padding: 16px 20px;
-      align-items: center;
-      border-bottom: 1px solid #f0f0f0;
-      transition: all 0.15s;
-    }
-    .table-row:hover { background: #f8fafc; }
-    .table-row:last-child { border-bottom: none; }
-    .knowledge-info { display: flex; flex-direction: column; gap: 4px; }
-    .knowledge-title {
-      font-size: 14px;
-      font-weight: 500;
-      color: #303133;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .knowledge-title:hover { color: #409eff; }
-    .type-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-      font-weight: 500;
-    }
-    .type-file { background: #e8f4fd; color: #1890ff; }
-    .type-text { background: #fef0e8; color: #ff6a00; }
-    .type-url { background: #e8f8f0; color: #52c41a; }
-    .knowledge-meta { font-size: 12px; color: #909399; display: flex; align-items: center; gap: 8px; }
-    .category-tag {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 4px;
-      font-size: 12px;
-    }
-    .cat-law { background: #fde2e2; color: #cf4444; }
-    .cat-tech { background: #e8f9e8; color: #389b48; }
-    .cat-case { background: #fff3e0; color: #d9822b; }
-    .cat-policy { background: #e8eaf6; color: #4f5bd5; }
-    .status-group { display: flex; gap: 8px; flex-wrap: wrap; }
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px 10px;
-      border-radius: 20px;
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .status-badge svg { width: 14px; height: 14px; }
-    .status-es {
-      background: #f0f9eb;
-      color: #67c23a;
-      border: 1px solid #c2e7b0;
-    }
-    .status-es:hover { background: #d4edbc; }
-    .status-es.pending {
-      background: #fdf6ec;
-      color: #e6a23c;
-      border: 1px solid #f5dab1;
-    }
-    .status-vector {
-      background: #ecf5ff;
-      color: #409eff;
-      border: 1px solid #b3d8fd;
-    }
-    .status-vector:hover { background: #c2e1ff; }
-    .status-vector.pending {
-      background: #fdf6ec;
-      color: #e6a23c;
-      border: 1px solid #f5dab1;
-    }
-    .status-graph {
-      background: #f4f3ff;
-      color: #909eff;
-      border: 1px solid #d3d4f1;
-    }
-    .status-graph:hover { background: #c5c6ef; }
-    .status-graph.pending {
-      background: #fdf6ec;
-      color: #e6a23c;
-      border: 1px solid #f5dab1;
-    }
-    .status-action-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 28px;
-      height: 28px;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-      transition: all 0.2s;
-      margin: 0 2px;
-    }
-    .status-action-btn:hover { transform: scale(1.1); }
-    .status-action-btn.es { background: #f0f9eb; color: #67c23a; }
-    .status-action-btn.es:hover { background: #67c23a; color: #fff; }
-    .status-action-btn.vector { background: #ecf5ff; color: #409eff; }
-    .status-action-btn.vector:hover { background: #409eff; color: #fff; }
-    .status-action-btn.graph { background: #f4f3ff; color: #909eff; }
-    .status-action-btn.graph:hover { background: #909eff; color: #fff; }
-    .status-action-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
-    .status-action-btn:disabled:hover { transform: none; }
-    .op-btn {
-      padding: 6px 12px;
-      border-radius: 4px;
-      font-size: 13px;
-      cursor: pointer;
-      transition: all 0.15s;
-      border: none;
-      background: transparent;
-    }
-    .op-btn.view {
-      color: #409eff;
-      background: #ecf5ff;
-    }
-    .op-btn.view:hover { background: #c2e1ff; }
-    .op-btn.edit {
-      color: #67c23a;
-      background: #f0f9eb;
-    }
-    .op-btn.edit:hover { background: #c2e7b0; }
-    .op-btn.more {
-      color: #909399;
-      background: #f5f5f5;
-    }
-    .op-btn.more:hover { background: #e8e8e8; }
-    .pagination {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      padding: 20px;
-      gap: 8px;
-    }
-    .page-btn {
-      min-width: 36px;
-      height: 36px;
-      border: 1px solid #dcdfe6;
-      background: #fff;
-      border-radius: 6px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 14px;
-      color: #606266;
-      transition: all 0.15s;
-    }
-    .page-btn:hover:not(:disabled) { border-color: #409eff; color: #409eff; }
-    .page-btn.active { background: #409eff; color: #fff; border-color: #409eff; }
-    .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .dialog-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0,0,0,0.5);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-    }
-    .dialog {
-      background: #fff;
-      border-radius: 12px;
-      width: 90%;
-      max-width: 600px;
-      max-height: 90vh;
-      overflow: hidden;
-      animation: slideUp 0.2s ease;
-    }
-    @keyframes slideUp {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .dialog-header {
-      padding: 20px 24px;
-      border-bottom: 1px solid #ebeef5;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .dialog-title { font-size: 18px; font-weight: 600; color: #303133; }
-    .dialog-close {
-      width: 32px;
-      height: 32px;
-      border: none;
-      background: transparent;
-      cursor: pointer;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #909399;
-      transition: all 0.15s;
-    }
-    .dialog-close:hover { background: #f5f5f5; }
-    .dialog-body { padding: 24px; max-height: 60vh; overflow-y: auto; }
-    .form-item { margin-bottom: 20px; }
-    .form-label {
-      display: block;
-      font-size: 14px;
-      color: #606266;
-      margin-bottom: 8px;
-      font-weight: 500;
-    }
-    .form-label.required::before { content: '*'; color: #f56c6c; margin-right: 4px; }
-    .form-input {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid #dcdfe6;
-      border-radius: 6px;
-      font-size: 14px;
-      transition: all 0.15s;
-    }
-    .form-input:focus { outline: none; border-color: #409eff; box-shadow: 0 0 0 2px rgba(64,158,255,0.1); }
-    .form-select {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid #dcdfe6;
-      border-radius: 6px;
-      font-size: 14px;
-      background: #fff;
-      cursor: pointer;
-    }
-    .dialog-footer {
-      padding: 16px 24px;
-      border-top: 1px solid #ebeef5;
-      display: flex;
-      justify-content: flex-end;
-      gap: 12px;
-    }
-    .btn-cancel {
-      padding: 10px 20px;
-      border: 1px solid #dcdfe6;
-      background: #fff;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      color: #606266;
-      transition: all 0.15s;
-    }
-    .btn-cancel:hover { border-color: #409eff; color: #409eff; }
-    .btn-confirm {
-      padding: 10px 24px;
-      border: none;
-      background: #409eff;
-      color: #fff;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: all 0.15s;
-    }
-    .btn-confirm:hover { background: #66b1ff; }
-    .btn-confirm:disabled { opacity: 0.6; cursor: not-allowed; }
-    .upload-zone {
-      border: 2px dashed #dcdfe6;
-      border-radius: 8px;
-      padding: 40px;
-      text-align: center;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .upload-zone:hover { border-color: #409eff; background: #f8fafc; }
-    .upload-icon { font-size: 48px; color: #c0c4cc; margin-bottom: 12px; }
-    .upload-text { color: #606266; font-size: 14px; }
-    .upload-text em { color: #409eff; font-style: normal; }
-    .upload-hint { color: #909399; font-size: 12px; margin-top: 8px; }
-    .editor-toolbar {
-      display: flex;
-      gap: 8px;
-      padding: 8px;
-      background: #f5f7fa;
-      border-radius: 6px 6px 0 0;
-      border: 1px solid #dcdfe6;
-      border-bottom: none;
-    }
-    .toolbar-btn {
-      width: 32px;
-      height: 32px;
-      border: none;
-      background: transparent;
-      border-radius: 4px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #606266;
-      transition: all 0.15s;
-    }
-    .toolbar-btn:hover { background: #fff; color: #409eff; }
-    .toolbar-btn.active { background: #409eff; color: #fff; }
-    .editor-content {
-      min-height: 200px;
-      padding: 12px;
-      border: 1px solid #dcdfe6;
-      border-radius: 0 0 6px 6px;
-      font-size: 14px;
-      line-height: 1.6;
-    }
-    .editor-content:focus { outline: none; border-color: #409eff; }
-    .empty-state {
-      text-align: center;
-      padding: 60px 20px;
-      color: #909399;
-    }
-    .empty-icon { font-size: 64px; margin-bottom: 16px; opacity: 0.5; }
-    .empty-text { font-size: 14px; }
-    .context-menu {
-      position: fixed;
-      background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-      padding: 6px 0;
-      min-width: 160px;
-      z-index: 1001;
-    }
-    .context-item {
-      padding: 10px 16px;
-      font-size: 14px;
-      color: #303133;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      transition: all 0.15s;
-    }
-    .context-item:hover { background: #f5f7fa; }
-    .context-item.danger { color: #f56c6c; }
-    .context-item.danger:hover { background: #fef0f0; }
-    .toast {
-      position: fixed;
-      bottom: 24px;
-      left: 50%;
-      transform: translateX(-50%);
-      padding: 12px 24px;
-      background: #303133;
-      color: #fff;
-      border-radius: 8px;
-      font-size: 14px;
-      z-index: 2000;
-      animation: fadeInUp 0.3s ease;
-    }
-    @keyframes fadeInUp {
-      from { opacity: 0; transform: translate(-50%, 10px); }
-      to { opacity: 1; transform: translate(-50%, 0); }
-    }
-    .toast.success { background: #67c23a; }
-    .toast.error { background: #f56c6c; }
-    .detail-panel {
-      position: fixed;
-      top: 0;
-      right: 0;
-      width: 500px;
-      height: 100vh;
-      background: #fff;
-      box-shadow: -4px 0 20px rgba(0,0,0,0.1);
-      z-index: 1000;
-      animation: slideIn 0.25s ease;
-      display: flex;
-      flex-direction: column;
-    }
-    @keyframes slideIn {
-      from { transform: translateX(100%); }
-      to { transform: translateX(0); }
-    }
-    .panel-header {
-      padding: 20px 24px;
-      border-bottom: 1px solid #ebeef5;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-    }
-    .panel-title { font-size: 18px; font-weight: 600; color: #303133; flex: 1; }
-    .panel-body { flex: 1; overflow-y: auto; padding: 24px; }
-    .detail-section { margin-bottom: 24px; }
-    .detail-label { font-size: 12px; color: #909399; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-    .detail-value { font-size: 14px; color: #303133; }
-    .detail-tags { display: flex; gap: 6px; flex-wrap: wrap; }
-    .detail-tag { padding: 4px 10px; background: #f0f2f5; border-radius: 4px; font-size: 12px; color: #606266; }
-    .status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-    .status-card {
-      padding: 16px;
-      border-radius: 8px;
-      text-align: center;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .status-card.es { background: #f0f9eb; border: 1px solid #e1f3d8; }
-    .status-card.es:hover { background: #d4edbc; }
-    .status-card.vector { background: #ecf5ff; border: 1px solid #d9ecff; }
-    .status-card.vector:hover { background: #c2e1ff; }
-    .status-card.graph { background: #f4f3ff; border: 1px solid #e4e6f0; }
-    .status-card.graph:hover { background: #c5c6ef; }
-    .status-card-icon { font-size: 24px; margin-bottom: 8px; }
-    .status-card-label { font-size: 13px; font-weight: 500; }
-    .status-card-value { font-size: 20px; font-weight: 600; margin-top: 4px; }
-    .action-log { background: #f8fafc; border-radius: 8px; padding: 16px; }
-    .log-item {
-      display: flex;
-      gap: 12px;
-      padding: 10px 0;
-      border-bottom: 1px solid #ebeef5;
-      font-size: 13px;
-    }
-    .log-item:last-child { border-bottom: none; }
-    .log-time { color: #909399; min-width: 140px; }
-    .log-action { color: #303133; flex: 1; }
-    .log-user { color: #409eff; }
-  </style>
-</head>
-<body>
-  <div id="app">
-    <div class="app-container">
-      <!-- 侧边栏 -->
-      <div class="sidebar">
-        <div class="logo">
-          <h1>知识中心</h1>
-          <span>Knowledge Center</span>
+<template>
+  <div class="knowledge-manage-new">
+    <!-- 页面标题栏 -->
+    <div class="page-header">
+      <div class="header-left">
+        <h1 class="page-title">知识管理</h1>
+        <p class="page-subtitle">管理所有知识内容，包括文档和文本</p>
+      </div>
+      <div class="header-actions">
+        <el-button type="success" @click="showTextDialog = true">
+          <el-icon><Edit /></el-icon>
+          添加文本
+        </el-button>
+        <el-button type="primary" @click="showUploadDialog = true">
+          <el-icon><Upload /></el-icon>
+          上传文档
+        </el-button>
+      </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="stats-grid">
+      <div class="stat-card" @click="handleStatsClick('total')">
+        <div class="stat-header">
+          <div class="stat-icon total">
+            <el-icon><Document /></el-icon>
+          </div>
+          <span class="stat-trend up">+12%</span>
         </div>
-        <div class="nav-item active">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-          知识管理
-        </div>
-        <div class="nav-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-          知识问答
-        </div>
-        <div class="nav-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-          图谱浏览
-        </div>
-        <div class="nav-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
-          文档库
-        </div>
-        <div class="nav-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-          系统设置
+        <div class="stat-value">{{ stats.total }}</div>
+        <div class="stat-label">知识总数</div>
+        <div class="stat-bar">
+          <div class="stat-bar-fill total" :style="{ width: '100%' }"></div>
         </div>
       </div>
-
-      <!-- 主内容区 -->
-      <div class="main-content">
-        <div class="page-header">
-          <h1 class="page-title">知识管理</h1>
-          <div class="header-actions">
-            <button class="btn-primary" @click="showUploadDialog = true">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-              上传知识
-            </button>
-            <button class="btn-secondary" @click="showTextDialog = true">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-              手动添加
-            </button>
+      <div class="stat-card" @click="handleStatsClick('es')">
+        <div class="stat-header">
+          <div class="stat-icon es">
+            <el-icon><Search /></el-icon>
           </div>
+          <span class="stat-trend">{{ Math.round(stats.esIndexed / stats.total * 100) || 0 }}%</span>
         </div>
-
-        <!-- 筛选区域 -->
-        <div class="filter-card">
-          <div class="filter-row">
-            <div class="filter-item">
-              <span class="filter-label">知识类型</span>
-              <select class="filter-select" v-model="filters.type" @change="handleFilter">
-                <option value="">全部</option>
-                <option value="file">文件</option>
-                <option value="text">富文本</option>
-                <option value="url">链接</option>
-              </select>
-            </div>
-            <div class="filter-item">
-              <span class="filter-label">知识分类</span>
-              <select class="filter-select" v-model="filters.category" @change="handleFilter">
-                <option value="">全部分类</option>
-                <option value="law">法律法规</option>
-                <option value="tech">技术标准</option>
-                <option value="case">执法案例</option>
-                <option value="policy">政策文件</option>
-              </select>
-            </div>
-            <div class="filter-item">
-              <span class="filter-label">ES状态</span>
-              <select class="filter-select" v-model="filters.esStatus" @change="handleFilter">
-                <option value="">全部</option>
-                <option value="indexed">已存储</option>
-                <option value="pending">待处理</option>
-                <option value="failed">失败</option>
-              </select>
-            </div>
-            <div class="filter-item">
-              <span class="filter-label">向量化</span>
-              <select class="filter-select" v-model="filters.vectorStatus" @change="handleFilter">
-                <option value="">全部</option>
-                <option value="done">已完成</option>
-                <option value="pending">待处理</option>
-                <option value="failed">失败</option>
-              </select>
-            </div>
-            <div class="filter-item">
-              <span class="filter-label">图库</span>
-              <select class="filter-select" v-model="filters.graphStatus" @change="handleFilter">
-                <option value="">全部</option>
-                <option value="done">已入图库</option>
-                <option value="pending">待处理</option>
-                <option value="failed">失败</option>
-              </select>
-            </div>
-            <input type="text" class="search-input" placeholder="搜索标题..." v-model="filters.keyword" @keyup.enter="handleFilter">
-            <button class="btn-secondary" @click="resetFilter" style="padding: 8px 16px;">重置</button>
-            <div class="filter-stats">
-              <span class="stat-item"><span class="stat-dot es"></span>ES {{ stats.esIndexed }}/{{ stats.total }}</span>
-              <span class="stat-item"><span class="stat-dot vector"></span>向量化 {{ stats.vectorDone }}/{{ stats.total }}</span>
-              <span class="stat-item"><span class="stat-dot graph"></span>图库 {{ stats.graphDone }}/{{ stats.total }}</span>
-            </div>
-          </div>
+        <div class="stat-value">{{ stats.esIndexed }}</div>
+        <div class="stat-label">全文检索 已索引</div>
+        <div class="stat-bar">
+          <div class="stat-bar-fill es" :style="{ width: (stats.esIndexed / stats.total * 100) + '%' }"></div>
         </div>
-
-        <!-- 知识列表 -->
-        <div class="knowledge-table">
-          <div class="table-header">
-            <div>知识内容</div>
-            <div>类型</div>
-            <div>分类</div>
-            <div>状态</div>
-            <div>操作</div>
+      </div>
+      <div class="stat-card" @click="handleStatsClick('vector')">
+        <div class="stat-header">
+          <div class="stat-icon vector">
+            <el-icon><Connection /></el-icon>
           </div>
-          <div class="table-body">
-            <div class="table-row" v-for="item in knowledgeList" :key="item.id" @click="openDetail(item)">
-              <div class="knowledge-info">
-                <div class="knowledge-title">
-                  <span :class="'type-badge type-' + item.type">
-                    <svg v-if="item.type === 'file'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                    <svg v-else-if="item.type === 'text'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
-                    <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
-                    {{ item.typeName }}
-                  </span>
-                  {{ item.title }}
-                </div>
-                <div class="knowledge-meta">
-                  <span>{{ item.source || '无来源' }}</span>
-                  <span>•</span>
-                  <span>{{ item.size }}</span>
-                  <span>•</span>
-                  <span>{{ item.createdAt }}</span>
-                </div>
-              </div>
-              <div>
-                <span :class="'category-tag cat-' + item.category">{{ item.categoryName }}</span>
-              </div>
-              <div class="status-group">
-                <!-- ES 状态 -->
-                <div style="display: flex; align-items: center; gap: 4px;">
-                  <span :class="'status-badge status-es ' + (item.esStatus === 'pending' ? 'pending' : '')"
-                        :title="item.esStatus === 'indexed' ? '已存储至ES' : '待处理'">
-                    <svg v-if="item.esStatus === 'indexed'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                    ES
-                  </span>
-                  <button class="status-action-btn es"
-                          @click.stop="retryProcess(item, 'es')"
-                          title="重新索引">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                  </button>
-                </div>
-                <!-- 向量 状态 -->
-                <div style="display: flex; align-items: center; gap: 4px;">
-                  <span :class="'status-badge status-vector ' + (item.vectorStatus === 'pending' ? 'pending' : '')"
-                        :title="item.vectorStatus === 'done' ? '已完成向量化' : '待处理'">
-                    <svg v-if="item.vectorStatus === 'done'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                    矢量
-                  </span>
-                  <button class="status-action-btn vector"
-                          @click.stop="retryProcess(item, 'vector')"
-                          :disabled="item.vectorStatus === 'done'"
-                          title="重新向量化">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                  </button>
-                </div>
-                <!-- 图谱 状态 -->
-                <div style="display: flex; align-items: center; gap: 4px;">
-                  <span :class="'status-badge status-graph ' + (item.graphStatus === 'pending' ? 'pending' : '')"
-                        :title="item.graphStatus === 'done' ? '已入图库' : '待处理'">
-                    <svg v-if="item.graphStatus === 'done'" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-                    <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                    图谱
-                  </span>
-                  <button class="status-action-btn graph"
-                          @click.stop="retryProcess(item, 'graph')"
-                          :disabled="item.graphStatus === 'done'"
-                          title="重新入库">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                  </button>
-                </div>
-              </div>
-              <div class="op-btns" @click.stop>
-                <button class="op-btn view" @click="openDetail(item)">查看</button>
-                <button class="op-btn more" @click="showContextMenu($event, item)">更多</button>
-              </div>
-            </div>
-            <div class="empty-state" v-if="knowledgeList.length === 0">
-              <div class="empty-icon">📭</div>
-              <div class="empty-text">暂无知识内容</div>
-            </div>
+          <span class="stat-trend pending">{{ Math.round(stats.vectorDone / stats.total * 100) || 0 }}%</span>
+        </div>
+        <div class="stat-value">{{ stats.vectorDone }}</div>
+        <div class="stat-label">已语义搜索</div>
+        <div class="stat-bar">
+          <div class="stat-bar-fill vector" :style="{ width: (stats.vectorDone / stats.total * 100) + '%' }"></div>
+        </div>
+      </div>
+      <div class="stat-card" @click="handleStatsClick('graph')">
+        <div class="stat-header">
+          <div class="stat-icon graph">
+            <el-icon><Grid /></el-icon>
           </div>
-          <div class="pagination">
-            <button class="page-btn" :disabled="pagination.page <= 1" @click="pagination.page--; loadData()">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
-            </button>
-            <button class="page-btn" v-for="p in visiblePages" :key="p"
-                    :class="{ active: p === pagination.page }"
-                    @click="pagination.page = p; loadData()">{{ p }}</button>
-            <button class="page-btn" :disabled="pagination.page >= pagination.total" @click="pagination.page++; loadData()">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </button>
-          </div>
+          <span class="stat-trend pending">{{ Math.round(stats.graphDone / stats.total * 100) || 0 }}%</span>
+        </div>
+        <div class="stat-value">{{ stats.graphDone }}</div>
+        <div class="stat-label">已入知识图谱</div>
+        <div class="stat-bar">
+          <div class="stat-bar-fill graph" :style="{ width: (stats.graphDone / stats.total * 100) + '%' }"></div>
         </div>
       </div>
     </div>
 
-    <!-- 上传对话框 -->
-    <div class="dialog-overlay" v-if="showUploadDialog" @click.self="showUploadDialog = false">
-      <div class="dialog">
-        <div class="dialog-header">
-          <h3 class="dialog-title">上传知识文件</h3>
-          <button class="dialog-close" @click="showUploadDialog = false">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          </button>
-        </div>
-        <div class="dialog-body">
-          <div class="form-item">
-            <label class="form-label required">上传文件</label>
-            <div class="upload-zone" @click="$refs.fileInput.click()">
-              <div class="upload-icon">📄</div>
-              <div class="upload-text">将文件拖到此处，或<em>点击上传</em></div>
-              <div class="upload-hint">支持 PDF、Word、TXT 格式，大小不超过 50MB</div>
-            </div>
-            <input type="file" ref="fileInput" style="display:none" accept=".pdf,.doc,.docx,.txt" @change="handleFileSelect">
-          </div>
-          <div class="form-item">
-            <label class="form-label">标题</label>
-            <input type="text" class="form-input" v-model="uploadForm.title" placeholder="不填则使用文件名">
-          </div>
-          <div class="form-item">
-            <label class="form-label required">知识分类</label>
-            <select class="form-select" v-model="uploadForm.category">
-              <option value="">请选择分类</option>
-              <option value="law">法律法规</option>
-              <option value="tech">技术标准</option>
-              <option value="case">执法案例</option>
-              <option value="policy">政策文件</option>
-            </select>
-          </div>
-          <div class="form-item">
-            <label class="form-label">来源</label>
-            <input type="text" class="form-input" v-model="uploadForm.source" placeholder="如：国务院令第279号">
-          </div>
-        </div>
-        <div class="dialog-footer">
-          <button class="btn-cancel" @click="showUploadDialog = false">取消</button>
-          <button class="btn-confirm" @click="handleUpload" :disabled="!uploadForm.file || !uploadForm.category">上传</button>
-        </div>
+    <!-- 筛选栏 -->
+    <div class="filter-bar">
+      <div class="search-box">
+        <el-input
+          v-model="filters.keyword"
+          placeholder="搜索知识标题..."
+          clearable
+          @keyup.enter="handleFilter"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
+      </div>
+      <el-select v-model="filters.type" placeholder="全部类型" clearable @change="handleFilter" style="width: 120px;">
+        <el-option label="全部类型" value="" />
+        <el-option label="PDF文档" value="pdf" />
+        <el-option label="Word文档" value="doc" />
+        <el-option label="文本" value="text" />
+      </el-select>
+      <el-select v-model="filters.category" placeholder="全部分类" clearable @change="handleFilter" style="width: 140px;">
+        <el-option label="全部分类" value="" />
+        <el-option label="法律法规" value="law" />
+        <el-option label="技术标准" value="tech" />
+        <el-option label="执法案例" value="case" />
+        <el-option label="政策文件" value="policy" />
+      </el-select>
+      <div class="status-filters">
+        <el-tag
+          :class="['filter-tag', allStatusCleared ? 'active' : '']"
+          @click="clearStatusFilter"
+          type="info"
+        >全部</el-tag>
+        <el-tag
+          :class="['filter-tag', filters.fullTextStatus === 'indexed' ? 'active' : '']"
+          @click="toggleStatusFilter('es')"
+          type="info"
+        >全文检索</el-tag>
+        <el-tag
+          :class="['filter-tag', filters.vectorStatus === 'done' ? 'active' : '']"
+          @click="toggleStatusFilter('vector')"
+          type="info"
+        >语义搜索</el-tag>
+        <el-tag
+          :class="['filter-tag', filters.graphStatus === 'done' ? 'active' : '']"
+          @click="toggleStatusFilter('graph')"
+          type="info"
+        >知识图谱</el-tag>
+      </div>
+      <div class="view-toggle">
+        <el-button-group>
+          <el-button :type="viewMode === 'list' ? 'primary' : ''" @click="viewMode = 'list'">
+            <el-icon><List /></el-icon>
+          </el-button>
+          <el-button :type="viewMode === 'grid' ? 'primary' : ''" @click="viewMode = 'grid'">
+            <el-icon><Grid /></el-icon>
+          </el-button>
+        </el-button-group>
       </div>
     </div>
 
-    <!-- 手动添加对话框 -->
-    <div class="dialog-overlay" v-if="showTextDialog" @click.self="showTextDialog = false">
-      <div class="dialog" style="max-width: 700px;">
-        <div class="dialog-header">
-          <h3 class="dialog-title">添加富文本知识</h3>
-          <button class="dialog-close" @click="showTextDialog = false">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-          </button>
-        </div>
-        <div class="dialog-body">
-          <div class="form-item">
-            <label class="form-label required">标题</label>
-            <input type="text" class="form-input" v-model="textForm.title" placeholder="请输入知识标题">
+    <!-- 列表视图 -->
+    <div v-if="viewMode === 'list'" class="knowledge-list">
+      <div
+        v-for="item in knowledgeList"
+        :key="item.id"
+        class="knowledge-card"
+        @click="viewFile(item)"
+      >
+        <div class="knowledge-main">
+          <div class="knowledge-header">
+            <el-tag :type="getTypeIcon(item.file_type)" size="small">
+              {{ item.file_type === 'pdf' ? '📕 PDF' : item.file_type === 'html' ? '📝 文本' : '📄 Word' }}
+            </el-tag>
+            <el-tag :type="getCategoryType(item.category)" size="small">{{ item.category_name }}</el-tag>
           </div>
-          <div class="form-item">
-            <label class="form-label required">内容</label>
-            <div class="editor-toolbar">
-              <button class="toolbar-btn" :class="{ active: textForm.bold }" @click="textForm.bold = !textForm.bold" title="粗体"><strong>B</strong></button>
-              <button class="toolbar-btn" :class="{ active: textForm.italic }" @click="textForm.italic = !textForm.italic" title="斜体"><em>I</em></button>
-              <button class="toolbar-btn" @click="textForm.list = !textForm.list" title="列表" :class="{ active: textForm.list }">☰</button>
+          <div class="knowledge-title">{{ item.title }}</div>
+          <div class="knowledge-meta">
+            <span class="meta-item">
+              <el-icon><Document /></el-icon>
+              {{ item.source || '无来源' }}
+            </span>
+            <span class="meta-item">
+              <el-icon><Clock /></el-icon>
+              {{ item.created_at }}
+            </span>
+          </div>
+        </div>
+        <div class="status-list">
+          <div :class="['status-item', 'es', item.es_indexed === 'indexed' ? 'active' : 'pending']">
+            <div class="status-header">
+              <el-icon><Search /></el-icon>
+              <span class="status-label">全文检索</span>
             </div>
-            <div class="editor-content" contenteditable="true" @input="textForm.content = $event.target.innerHTML"
-                 style="white-space: pre-wrap;" placeholder="请输入知识内容..."></div>
+            <div class="status-value">{{ item.es_indexed === 'indexed' ? '已索引' : '待索引' }}</div>
+            <div class="status-actions">
+              <el-button size="small" type="success" @click.stop="retryProcess(item, 'es')">重建</el-button>
+              <el-button size="small" type="danger" @click.stop="clearProcess(item, 'es')">清空</el-button>
+            </div>
           </div>
-          <div class="form-item">
-            <label class="form-label required">知识分类</label>
-            <select class="form-select" v-model="textForm.category">
-              <option value="">请选择分类</option>
-              <option value="law">法律法规</option>
-              <option value="tech">技术标准</option>
-              <option value="case">执法案例</option>
-              <option value="policy">政策文件</option>
-            </select>
+          <div :class="['status-item', 'vector', item.vector_indexed === 'done' ? 'active' : 'pending']">
+            <div class="status-header">
+              <el-icon><Connection /></el-icon>
+              <span class="status-label">语义搜索</span>
+            </div>
+            <div class="status-value">{{ item.vector_indexed === 'done' ? '已完成' : '待处理' }}</div>
+            <div class="status-actions">
+              <el-button size="small" type="success" @click.stop="retryProcess(item, 'vector')">重建</el-button>
+              <el-button size="small" type="danger" @click.stop="clearProcess(item, 'vector')">清空</el-button>
+            </div>
           </div>
-          <div class="form-item">
-            <label class="form-label">来源</label>
-            <input type="text" class="form-input" v-model="textForm.source" placeholder="如：国务院令第279号">
-          </div>
-          <div class="form-item">
-            <label class="form-label">标签</label>
-            <input type="text" class="form-input" v-model="textForm.tags" placeholder="多个标签用逗号分隔">
+          <div :class="['status-item', 'graph', item.graph_indexed === 'done' ? 'active' : 'pending']">
+            <div class="status-header">
+              <el-icon><Grid /></el-icon>
+              <span class="status-label">知识图谱</span>
+            </div>
+            <div class="status-value">{{ item.graph_indexed === 'done' ? '已完成' : '待处理' }}</div>
+            <div class="status-actions">
+              <el-button size="small" type="success" @click.stop="retryProcess(item, 'graph')">重建</el-button>
+              <el-button size="small" type="danger" @click.stop="clearProcess(item, 'graph')">清空</el-button>
+            </div>
           </div>
         </div>
-        <div class="dialog-footer">
-          <button class="btn-cancel" @click="showTextDialog = false">取消</button>
-          <button class="btn-confirm" @click="handleTextSubmit" :disabled="!textForm.title || !textForm.content || !textForm.category">保存</button>
+        <div class="action-buttons">
+          <el-button circle type="primary" @click.stop="viewFile(item)" title="查看">
+            <el-icon><View /></el-icon>
+          </el-button>
+          <el-button circle type="success" @click.stop="editItem(item)" title="编辑">
+            <el-icon><Edit /></el-icon>
+          </el-button>
+          <el-button circle type="danger" @click.stop="deleteItem(item)" title="删除">
+            <el-icon><Delete /></el-icon>
+          </el-button>
         </div>
       </div>
+      <el-empty v-if="knowledgeList.length === 0" description="暂无知识内容" />
     </div>
 
-    <!-- 详情面板 -->
-    <div class="detail-panel" v-if="showDetailPanel">
-      <div class="panel-header">
-        <h3 class="panel-title">{{ currentItem.title }}</h3>
-        <button class="dialog-close" @click="showDetailPanel = false">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </div>
-      <div class="panel-body">
-        <div class="detail-section">
-          <div class="detail-label">基本信息</div>
-          <div class="detail-value" style="display: flex; gap: 8px; margin-bottom: 12px;">
-            <span :class="'type-badge type-' + currentItem.type">{{ currentItem.typeName }}</span>
-            <span :class="'category-tag cat-' + currentItem.category">{{ currentItem.categoryName }}</span>
-          </div>
-          <p style="font-size: 14px; color: #606266; line-height: 1.6;">{{ currentItem.description || '暂无描述' }}</p>
+    <!-- 网格视图 -->
+    <div v-if="viewMode === 'grid'" class="knowledge-grid">
+      <div
+        v-for="item in knowledgeList"
+        :key="item.id"
+        class="knowledge-grid-card"
+        @click="viewFile(item)"
+      >
+        <div class="grid-card-header">
+          <div class="grid-card-title">{{ item.title }}</div>
+          <el-tag size="small">{{ item.file_type === 'pdf' ? 'PDF' : item.file_type === 'html' ? '文本' : 'Word' }}</el-tag>
         </div>
-        <div class="detail-section">
-          <div class="detail-label">处理状态</div>
-          <div class="status-grid">
-            <div class="status-card es" @click="retryProcess('es')">
-              <div class="status-card-icon">🔍</div>
-              <div class="status-card-label">ES 存储</div>
-              <div class="status-card-value" :style="{ color: currentItem.esStatus === 'indexed' ? '#67c23a' : '#e6a23c' }">
-                {{ currentItem.esStatus === 'indexed' ? '已存储' : '待处理' }}
-              </div>
+        <div class="grid-card-meta">
+          <el-tag :type="getCategoryType(item.category)" size="small">{{ item.category_name }}</el-tag>
+          <span class="meta-item">{{ item.source || '无来源' }}</span>
+          <span class="meta-item">{{ item.created_at }}</span>
+        </div>
+        <div class="grid-card-status">
+          <div :class="['grid-status-item', 'es', item.es_indexed === 'indexed' ? 'active' : 'pending']">
+            <div class="grid-status-header">
+              <el-icon><Search /></el-icon>
+              <span class="grid-status-label">全文检索</span>
             </div>
-            <div class="status-card vector" @click="retryProcess('vector')">
-              <div class="status-card-icon">📐</div>
-              <div class="status-card-label">向量化</div>
-              <div class="status-card-value" :style="{ color: currentItem.vectorStatus === 'done' ? '#67c23a' : '#e6a23c' }">
-                {{ currentItem.vectorStatus === 'done' ? '已完成' : '待处理' }}
-              </div>
-            </div>
-            <div class="status-card graph" @click="retryProcess('graph')">
-              <div class="status-card-icon">🕸️</div>
-              <div class="status-card-label">图谱入库</div>
-              <div class="status-card-value" :style="{ color: currentItem.graphStatus === 'done' ? '#67c23a' : '#e6a23c' }">
-                {{ currentItem.graphStatus === 'done' ? '已入图库' : '待处理' }}
-              </div>
+            <div class="grid-status-value">{{ item.es_indexed === 'indexed' ? '已索引' : '待索引' }}</div>
+            <div class="status-actions">
+              <el-button size="small" type="success" @click.stop="retryProcess(item, 'es')">重建</el-button>
+              <el-button size="small" type="danger" @click.stop="clearProcess(item, 'es')">清空</el-button>
             </div>
           </div>
-        </div>
-        <div class="detail-section">
-          <div class="detail-label">元数据</div>
-          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-            <div>
-              <div class="detail-label" style="font-size: 11px;">来源</div>
-              <div class="detail-value">{{ currentItem.source || '-' }}</div>
+          <div :class="['grid-status-item', 'vector', item.vector_indexed === 'done' ? 'active' : 'pending']">
+            <div class="grid-status-header">
+              <el-icon><Connection /></el-icon>
+              <span class="grid-status-label">语义搜索</span>
             </div>
-            <div>
-              <div class="detail-label" style="font-size: 11px;">大小</div>
-              <div class="detail-value">{{ currentItem.size }}</div>
+            <div class="grid-status-value">{{ item.vector_indexed === 'done' ? '已完成' : '待处理' }}</div>
+            <div class="status-actions">
+              <el-button size="small" type="success" @click.stop="retryProcess(item, 'vector')">重建</el-button>
+              <el-button size="small" type="danger" @click.stop="clearProcess(item, 'vector')">清空</el-button>
             </div>
-            <div>
-              <div class="detail-label" style="font-size: 11px;">创建时间</div>
-              <div class="detail-value">{{ currentItem.createdAt }}</div>
+          </div>
+          <div :class="['grid-status-item', 'graph', item.graph_indexed === 'done' ? 'active' : 'pending']">
+            <div class="grid-status-header">
+              <el-icon><Grid /></el-icon>
+              <span class="grid-status-label">知识图谱</span>
             </div>
-            <div>
-              <div class="detail-label" style="font-size: 11px;">更新时间</div>
-              <div class="detail-value">{{ currentItem.updatedAt }}</div>
+            <div class="grid-status-value">{{ item.graph_indexed === 'done' ? '已完成' : '待处理' }}</div>
+            <div class="status-actions">
+              <el-button size="small" type="success" @click.stop="retryProcess(item, 'graph')">重建</el-button>
+              <el-button size="small" type="danger" @click.stop="clearProcess(item, 'graph')">清空</el-button>
             </div>
           </div>
         </div>
-        <div class="detail-section" v-if="currentItem.tags && currentItem.tags.length">
-          <div class="detail-label">标签</div>
-          <div class="detail-tags">
-            <span class="detail-tag" v-for="tag in currentItem.tags" :key="tag">{{ tag }}</span>
-          </div>
-        </div>
-        <div class="detail-section">
-          <div class="detail-label">操作日志</div>
-          <div class="action-log">
-            <div class="log-item" v-for="log in currentItem.logs" :key="log.time">
-              <span class="log-time">{{ log.time }}</span>
-              <span class="log-action">{{ log.action }}</span>
-              <span class="log-user">{{ log.user }}</span>
-            </div>
+        <div class="grid-card-footer">
+          <div></div>
+          <div class="grid-card-actions">
+            <el-button circle type="primary" size="small" @click.stop="viewFile(item)">
+              <el-icon><View /></el-icon>
+            </el-button>
+            <el-button circle type="success" size="small" @click.stop="editItem(item)">
+              <el-icon><Edit /></el-icon>
+            </el-button>
+            <el-button circle type="danger" size="small" @click.stop="deleteItem(item)">
+              <el-icon><Delete /></el-icon>
+            </el-button>
           </div>
         </div>
       </div>
+      <el-empty v-if="knowledgeList.length === 0" description="暂无知识内容" />
     </div>
 
-    <!-- 右键菜单 -->
-    <div class="context-menu" v-if="contextMenu.show" :style="{ top: contextMenu.y + 'px', left: contextMenu.x + 'px' }">
-      <div class="context-item" @click="openDetail(contextMenu.item); contextMenu.show = false">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-        查看详情
-      </div>
-      <div class="context-item" @click="contextMenu.show = false">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-        编辑
-      </div>
-      <div class="context-item" @click="reprocessItem(contextMenu.item); contextMenu.show = false">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-        重新处理
-      </div>
-      <div class="context-item" @click="contextMenu.show = false">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-        复制链接
-      </div>
-      <div style="border-top: 1px solid #ebeef5; margin: 6px 0;"></div>
-      <div class="context-item danger" @click="deleteItem(contextMenu.item); contextMenu.show = false">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-        删除
-      </div>
+    <!-- 分页 -->
+    <div class="pagination-wrapper">
+      <el-pagination
+        v-model:current-page="pagination.page"
+        v-model:page-size="pagination.pageSize"
+        :total="pagination.total"
+        :page-sizes="[10, 20, 50, 100]"
+        layout="total, sizes, prev, pager, next, jumper"
+        @size-change="loadData"
+        @current-change="loadData"
+      />
     </div>
 
-    <!-- Toast -->
-    <div class="toast" :class="toast.type" v-if="toast.show">{{ toast.message }}</div>
+    <!-- 上传弹窗 -->
+    <el-dialog v-model="showUploadDialog" title="上传知识" width="500px">
+      <el-form ref="uploadFormRef" :model="uploadForm" label-width="80px">
+        <el-form-item label="文件" required>
+          <el-upload
+            ref="uploadRef"
+            :auto-upload="false"
+            :limit="1"
+            :on-change="handleFileSelect"
+            :on-remove="handleFileRemove"
+            accept=".pdf,.doc,.docx"
+          >
+            <el-button type="primary">选择文件</el-button>
+            <template #tip>
+              <div class="el-upload__tip">支持 PDF、Word 格式，大小不超过 50MB</div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="标题">
+          <el-input v-model="uploadForm.title" placeholder="不填则使用文件名" />
+        </el-form-item>
+        <el-form-item label="分类" required>
+          <el-select v-model="uploadForm.category" placeholder="请选择分类">
+            <el-option label="法律法规" value="law" />
+            <el-option label="技术标准" value="tech" />
+            <el-option label="执法案例" value="case" />
+            <el-option label="政策文件" value="policy" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="来源">
+          <el-input v-model="uploadForm.source" placeholder="如：国务院令第279号" />
+        </el-form-item>
+        <el-form-item label="标签">
+          <el-input v-model="uploadForm.tags" placeholder="多个标签用逗号分隔" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showUploadDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleUpload" :disabled="!uploadForm.file || !uploadForm.category">上传</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 文本弹窗 -->
+    <el-dialog v-model="showTextDialog" title="手动添加知识" width="600px">
+      <el-form ref="textFormRef" :model="textForm" label-width="80px">
+        <el-form-item label="标题" required>
+          <el-input v-model="textForm.title" placeholder="请输入知识标题" />
+        </el-form-item>
+        <el-form-item label="内容" required>
+          <el-input
+            v-model="textForm.content"
+            type="textarea"
+            :rows="6"
+            placeholder="请输入知识内容"
+          />
+        </el-form-item>
+        <el-form-item label="分类" required>
+          <el-select v-model="textForm.category" placeholder="请选择分类">
+            <el-option label="法律法规" value="law" />
+            <el-option label="技术标准" value="tech" />
+            <el-option label="执法案例" value="case" />
+            <el-option label="政策文件" value="policy" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="来源">
+          <el-input v-model="textForm.source" placeholder="如：国务院令第279号" />
+        </el-form-item>
+        <el-form-item label="标签">
+          <el-input v-model="textForm.tags" placeholder="多个标签用逗号分隔" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showTextDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleTextSubmit" :disabled="!textForm.title || !textForm.content || !textForm.category">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 预览弹窗 -->
+    <el-dialog v-model="showPreview" title="知识预览" width="900px" top="5vh">
+      <div class="preview-header">
+        <div class="preview-title">
+          <span>{{ previewItem.title }}</span>
+          <el-tag :type="previewItem.file_type === 'pdf' ? 'danger' : 'primary'">
+            {{ previewItem.file_type === 'pdf' ? 'PDF文档' : previewItem.file_type === 'html' ? '文本' : 'Word文档' }}
+          </el-tag>
+        </div>
+      </div>
+      <div class="preview-toolbar">
+        <el-button size="small">放大</el-button>
+        <el-button size="small">缩小</el-button>
+        <el-button size="small">下载</el-button>
+        <el-button size="small">打印</el-button>
+      </div>
+      <div class="preview-content">
+        <div class="preview-placeholder">
+          <el-icon class="preview-icon"><Document /></el-icon>
+          <div class="preview-text">{{ previewItem.file_type === 'pdf' ? 'PDF 文件预览' : 'Word 文档预览' }}</div>
+          <div class="preview-hint">{{ previewItem.title }}</div>
+        </div>
+      </div>
+    </el-dialog>
   </div>
+</template>
 
-  <script>
-    const { createApp, ref, reactive, computed, onMounted } = Vue
+<script setup>
+import { ref, reactive, computed, onMounted } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  Document, Search, Connection, Grid, List, View, Edit, Delete,
+  Upload, Clock, Folder
+} from '@element-plus/icons-vue'
+import { knowledgeApi } from '@/api/index.js'
+import { useRouter } from 'vue-router'
 
-    createApp({
-      setup() {
-        const knowledgeList = ref([])
-        const showUploadDialog = ref(false)
-        const showTextDialog = ref(false)
-        const showDetailPanel = ref(false)
-        const currentItem = ref({})
+const router = useRouter()
 
-        const filters = reactive({
-          type: '',
-          category: '',
-          esStatus: '',
-          vectorStatus: '',
-          graphStatus: '',
-          keyword: ''
-        })
+// 视图模式
+const viewMode = ref('grid')
 
-        const pagination = reactive({
-          page: 1,
-          pageSize: 10,
-          total: 10
-        })
+// 知识列表
+const knowledgeList = ref([])
 
-        const stats = reactive({
-          total: 12,
-          esIndexed: 10,
-          vectorDone: 8,
-          graphDone: 6
-        })
+// 统计
+const stats = reactive({
+  total: 0,
+  esIndexed: 0,
+  vectorDone: 0,
+  graphDone: 0
+})
 
-        const uploadForm = reactive({
-          file: null,
-          title: '',
-          category: '',
-          source: ''
-        })
+// 筛选
+const filters = reactive({
+  type: '',
+  category: '',
+  fullTextStatus: '',
+  vectorStatus: '',
+  graphStatus: '',
+  keyword: ''
+})
 
-        const textForm = reactive({
-          title: '',
-          content: '',
-          category: '',
-          source: '',
-          tags: '',
-          bold: false,
-          italic: false,
-          list: false
-        })
+// 分页
+const pagination = reactive({
+  page: 1,
+  pageSize: 20,
+  total: 0
+})
 
-        const contextMenu = reactive({
-          show: false,
-          x: 0,
-          y: 0,
-          item: null
-        })
+// 弹窗状态
+const showUploadDialog = ref(false)
+const showTextDialog = ref(false)
+const showPreview = ref(false)
 
-        const toast = reactive({
-          show: false,
-          message: '',
-          type: 'success'
-        })
+// 上传表单
+const uploadForm = reactive({
+  file: null,
+  title: '',
+  category: '',
+  source: '',
+  tags: ''
+})
 
-        const visiblePages = computed(() => {
-          const pages = []
-          const total = pagination.total
-          const current = pagination.page
-          let start = Math.max(1, current - 2)
-          let end = Math.min(total, start + 4)
-          if (end - start < 4) start = Math.max(1, end - 4)
-          for (let i = start; i <= end; i++) pages.push(i)
-          return pages
-        })
+// 文本表单
+const textForm = reactive({
+  title: '',
+  content: '',
+  category: '',
+  source: '',
+  tags: ''
+})
 
-        const showToast = (message, type = 'success') => {
-          toast.message = message
-          toast.type = type
-          toast.show = true
-          setTimeout(() => toast.show = false, 3000)
-        }
+// 预览项
+const previewItem = ref({ title: '', file_type: 'pdf' })
 
-        const loadData = () => {
-          // 模拟数据
-          knowledgeList.value = [
-            { id: 1, title: '中华人民共和国安全生产法', type: 'file', typeName: '文件', category: 'law', categoryName: '法律法规', source: '国务院令第88号', size: '2.5MB', createdAt: '2024-03-15 10:30', updatedAt: '2024-03-15 14:20', esStatus: 'indexed', vectorStatus: 'done', graphStatus: 'done', description: '安全生产法是我国安全生产领域的基本法律...', tags: ['安全生产', '法律'], logs: [{ time: '2024-03-15 14:20', action: '更新状态', user: '系统' }, { time: '2024-03-15 10:30', action: '创建知识', user: '张三' }] },
-            { id: 2, title: '危险化学品储存安全规范', type: 'file', typeName: '文件', category: 'tech', categoryName: '技术标准', source: 'GB/T 12345-2020', size: '1.8MB', createdAt: '2024-03-14 09:15', updatedAt: '2024-03-14 16:45', esStatus: 'indexed', vectorStatus: 'done', graphStatus: 'pending', description: '规定了危险化学品储存的基本要求...', tags: ['危化品', '储存', '标准'], logs: [{ time: '2024-03-14 16:45', action: '向量化完成', user: '系统' }] },
-            { id: 3, title: '2024年安全生产月活动方案', type: 'text', typeName: '富文本', category: 'policy', categoryName: '政策文件', source: '应急管理部', size: '-', createdAt: '2024-03-13 14:20', updatedAt: '2024-03-13 14:20', esStatus: 'pending', vectorStatus: 'pending', graphStatus: 'pending', description: '关于开展2024年安全生产月活动的通知...', tags: ['安全生产月', '活动'], logs: [] },
-            { id: 4, title: '某化工企业火灾事故调查报告', type: 'text', typeName: '富文本', category: 'case', categoryName: '执法案例', source: '应急管理部公告', size: '-', createdAt: '2024-03-12 11:00', updatedAt: '2024-03-12 11:00', esStatus: 'indexed', vectorStatus: 'done', graphStatus: 'done', description: '2024年1月，某化工企业发生火灾...', tags: ['火灾', '事故', '调查'], logs: [{ time: '2024-03-12 15:30', action: '入图库', user: '系统' }] },
-            { id: 5, title: '特种设备安全监察条例', type: 'url', typeName: '链接', category: 'law', categoryName: '法律法规', source: '国务院令第549号', size: '-', createdAt: '2024-03-11 08:45', updatedAt: '2024-03-11 08:45', esStatus: 'indexed', vectorStatus: 'done', graphStatus: 'done', description: '特种设备安全监察条例全文...', tags: ['特种设备', '监察'], logs: [] },
-            { id: 6, title: '粉尘防爆安全规程', type: 'file', typeName: '文件', category: 'tech', categoryName: '技术标准', source: 'GB 15577-2018', size: '3.2MB', createdAt: '2024-03-10 16:30', updatedAt: '2024-03-10 16:30', esStatus: 'indexed', vectorStatus: 'pending', graphStatus: 'pending', description: '适用于粉尘爆炸危险场所的防爆安全要求...', tags: ['粉尘', '防爆', '标准'], logs: [] },
-          ]
-        }
+// 状态筛选
+const allStatusCleared = computed(() => !filters.fullTextStatus && !filters.vectorStatus && !filters.graphStatus)
 
-        const handleFilter = () => {
-          pagination.page = 1
-          loadData()
-        }
+const getCategoryType = (category) => {
+  const types = { law: 'danger', tech: 'success', case: 'warning', policy: '' }
+  return types[category] || ''
+}
 
-        const resetFilter = () => {
-          filters.type = ''
-          filters.category = ''
-          filters.esStatus = ''
-          filters.vectorStatus = ''
-          filters.graphStatus = ''
-          filters.keyword = ''
-          handleFilter()
-        }
+const getTypeIcon = (fileType) => {
+  const types = { pdf: 'danger', doc: 'primary', html: 'info' }
+  return types[fileType] || ''
+}
 
-        const handleFileSelect = (e) => {
-          const file = e.target.files[0]
-          if (file) {
-            uploadForm.file = file
-            if (!uploadForm.title) {
-              uploadForm.title = file.name.replace(/\.[^.]+$/, '')
-            }
-          }
-        }
+const clearStatusFilter = () => {
+  filters.fullTextStatus = ''
+  filters.vectorStatus = ''
+  filters.graphStatus = ''
+  handleFilter()
+}
 
-        const handleUpload = () => {
-          if (!uploadForm.file || !uploadForm.category) return
-          showToast('文件上传成功！')
-          showUploadDialog.value = false
-          uploadForm.file = null
-          uploadForm.title = ''
-          uploadForm.category = ''
-          uploadForm.source = ''
-          loadData()
-        }
+const toggleStatusFilter = (type) => {
+  if (type === 'es') filters.fullTextStatus = filters.fullTextStatus === 'indexed' ? '' : 'indexed'
+  if (type === 'vector') filters.vectorStatus = filters.vectorStatus === 'done' ? '' : 'done'
+  if (type === 'graph') filters.graphStatus = filters.graphStatus === 'done' ? '' : 'done'
+  handleFilter()
+}
 
-        const handleTextSubmit = () => {
-          if (!textForm.title || !textForm.content || !textForm.category) return
-          showToast('知识添加成功！')
-          showTextDialog.value = false
-          textForm.title = ''
-          textForm.content = ''
-          textForm.category = ''
-          textForm.source = ''
-          textForm.tags = ''
-          loadData()
-        }
+const handleFilter = () => {
+  pagination.page = 1
+  loadData()
+}
 
-        const openDetail = (item) => {
-          currentItem.value = item
-          showDetailPanel.value = true
-          contextMenu.show = false
-        }
+// 加载数据
+const loadData = async () => {
+  try {
+    const params = {
+      page: pagination.page,
+      page_size: pagination.pageSize
+    }
+    if (filters.category) params.category = filters.category
+    if (filters.keyword) params.keyword = filters.keyword
 
-        const toggleStatus = (item, type) => {
-          showToast(`已触发${type === 'es' ? 'ES索引' : type === 'vector' ? '向量化' : '图谱入库'}处理`)
-        }
+    const res = await knowledgeApi.list(params)
+    knowledgeList.value = (res.items || []).map(item => ({
+      ...item,
+      es_indexed: item.es_indexed || 'indexed',
+      vector_indexed: item.vector_indexed || 'done',
+      graph_indexed: item.graph_indexed || 'pending',
+      file_type: item.file_type || (item.content ? 'html' : 'unknown')
+    }))
+    pagination.total = res.total || 0
+  } catch (error) {
+    console.error('加载知识列表失败:', error)
+  }
+}
 
-        const retryProcess = (type) => {
-          showToast(`已提交${type === 'es' ? 'ES索引' : type === 'vector' ? '向量化' : '图谱入库'}任务`)
-        }
+// 加载统计
+const loadStats = async () => {
+  try {
+    const res = await knowledgeApi.stats()
+    Object.assign(stats, res)
+  } catch (error) {
+    console.error('加载统计失败:', error)
+    // 使用默认值
+    stats.total = knowledgeList.value.length
+    stats.esIndexed = knowledgeList.value.filter(i => i.es_indexed === 'indexed').length
+    stats.vectorDone = knowledgeList.value.filter(i => i.vector_indexed === 'done').length
+    stats.graphDone = knowledgeList.value.filter(i => i.graph_indexed === 'done').length
+  }
+}
 
-        const showContextMenu = (e, item) => {
-          contextMenu.x = e.clientX
-          contextMenu.y = e.clientY
-          contextMenu.item = item
-          contextMenu.show = true
-        }
+// 文件选择
+const handleFileSelect = (file) => {
+  uploadForm.file = file.raw
+  if (!uploadForm.title) {
+    uploadForm.title = file.name.replace(/\.[^.]+$/, '')
+  }
+}
 
-        const reprocessItem = (item) => {
-          showToast('已提交重新处理任务')
-        }
+const handleFileRemove = () => {
+  uploadForm.file = null
+}
 
-        const deleteItem = (item) => {
-          showToast('删除成功', 'success')
-        }
+// 上传
+const handleUpload = async () => {
+  if (!uploadForm.file || !uploadForm.category) {
+    ElMessage.warning('请选择文件并填写分类')
+    return
+  }
 
-        onMounted(() => {
-          loadData()
-          document.addEventListener('click', () => {
-            contextMenu.show = false
-          })
-        })
+  const formData = new FormData()
+  formData.append('file', uploadForm.file)
+  formData.append('category', uploadForm.category)
+  if (uploadForm.title) formData.append('title', uploadForm.title)
+  if (uploadForm.source) formData.append('source', uploadForm.source)
+  if (uploadForm.tags) formData.append('tags', uploadForm.tags)
 
-        return {
-          knowledgeList,
-          showUploadDialog,
-          showTextDialog,
-          showDetailPanel,
-          currentItem,
-          filters,
-          pagination,
-          stats,
-          uploadForm,
-          textForm,
-          contextMenu,
-          toast,
-          visiblePages,
-          loadData,
-          handleFilter,
-          resetFilter,
-          handleFileSelect,
-          handleUpload,
-          handleTextSubmit,
-          openDetail,
-          toggleStatus,
-          retryProcess,
-          showContextMenu,
-          reprocessItem,
-          deleteItem,
-          showToast
-        }
-      }
-    }).mount('#app')
-  </script>
-</body>
-</html>
+  try {
+    await knowledgeApi.upload(formData)
+    ElMessage.success('上传成功')
+    showUploadDialog.value = false
+    uploadForm.file = null
+    uploadForm.title = ''
+    uploadForm.category = ''
+    uploadForm.source = ''
+    uploadForm.tags = ''
+    loadData()
+    loadStats()
+  } catch (error) {
+    ElMessage.error('上传失败')
+  }
+}
+
+// 添加文本
+const handleTextSubmit = async () => {
+  if (!textForm.title || !textForm.content || !textForm.category) {
+    ElMessage.warning('请填写必填项')
+    return
+  }
+
+  try {
+    const data = {
+      title: textForm.title,
+      content: textForm.content,
+      category: textForm.category
+    }
+    if (textForm.source) data.source = textForm.source
+    if (textForm.tags) data.tags = textForm.tags.split(',').map(t => t.trim()).filter(Boolean)
+
+    await knowledgeApi.createManual(data)
+    ElMessage.success('知识添加成功')
+    showTextDialog.value = false
+    textForm.title = ''
+    textForm.content = ''
+    textForm.category = ''
+    textForm.source = ''
+    textForm.tags = ''
+    loadData()
+    loadStats()
+  } catch (error) {
+    ElMessage.error('添加失败')
+  }
+}
+
+// 查看
+const viewFile = (item) => {
+  previewItem.value = { title: item.title, file_type: item.file_type }
+  showPreview.value = true
+}
+
+// 编辑
+const editItem = (item) => {
+  router.push(`/knowledge/detail/${item.id}`)
+}
+
+// 删除
+const deleteItem = async (item) => {
+  try {
+    await ElMessageBox.confirm(`确定要删除知识「${item.title}」吗？`, '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await knowledgeApi.delete(item.id)
+    ElMessage.success('删除成功')
+    loadData()
+    loadStats()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+// 重建
+const retryProcess = async (item, type) => {
+  const names = { es: '全文检索', vector: '语义搜索', graph: '知识图谱' }
+  try {
+    await knowledgeApi.rebuild(item.id, type)
+    ElMessage.success(`已提交${names[type]}重建任务`)
+    loadData()
+  } catch (error) {
+    ElMessage.error('操作失败')
+  }
+}
+
+// 清空
+const clearProcess = async (item, type) => {
+  const names = { es: '全文检索', vector: '语义搜索', graph: '知识图谱' }
+  try {
+    await ElMessageBox.confirm(`确定要清空${names[type]}数据吗？`, '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await knowledgeApi.clear(item.id, type)
+    ElMessage.success(`已清空${names[type]}数据`)
+    loadData()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('操作失败')
+    }
+  }
+}
+
+// 统计卡片点击
+const handleStatsClick = (type) => {
+  if (type === 'total') {
+    clearStatusFilter()
+  } else if (type === 'es') {
+    filters.fullTextStatus = filters.fullTextStatus === 'indexed' ? '' : 'indexed'
+    handleFilter()
+  } else if (type === 'vector') {
+    filters.vectorStatus = filters.vectorStatus === 'done' ? '' : 'done'
+    handleFilter()
+  } else if (type === 'graph') {
+    filters.graphStatus = filters.graphStatus === 'done' ? '' : 'done'
+    handleFilter()
+  }
+}
+
+onMounted(() => {
+  loadData()
+  loadStats()
+})
+</script>
+
+<style scoped>
+.knowledge-manage-new {
+  padding: 24px;
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+  margin: 0;
+}
+
+.page-subtitle {
+  font-size: 14px;
+  color: var(--el-text-color-secondary);
+  margin: 4px 0 0 0;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+/* 统计卡片 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: var(--el-bg-color);
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid var(--el-border-color-light);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.stat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+}
+
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.stat-icon.total {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #fff;
+}
+
+.stat-icon.es {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+}
+
+.stat-icon.vector {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: #fff;
+}
+
+.stat-icon.graph {
+  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  color: #fff;
+}
+
+.stat-trend {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 8px;
+  border-radius: 20px;
+}
+
+.stat-trend.up {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.stat-trend.pending {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--el-text-color-primary);
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.stat-bar {
+  height: 4px;
+  background: var(--el-border-color-extra-light);
+  border-radius: 2px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+.stat-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
+.stat-bar-fill.total {
+  background: linear-gradient(90deg, #6366f1, #818cf8);
+}
+
+.stat-bar-fill.es {
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.stat-bar-fill.vector {
+  background: linear-gradient(90deg, #3b82f6, #60a5fa);
+}
+
+.stat-bar-fill.graph {
+  background: linear-gradient(90deg, #8b5cf6, #a78bfa);
+}
+
+/* 筛选栏 */
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+  background: var(--el-bg-color);
+  padding: 16px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--el-border-color-light);
+}
+
+.search-box {
+  position: relative;
+  flex: 1;
+  min-width: 200px;
+  max-width: 300px;
+}
+
+.status-filters {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-tag {
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.filter-tag.active {
+  background: var(--el-color-primary);
+  color: #fff;
+}
+
+.view-toggle {
+  margin-left: auto;
+}
+
+/* 知识列表 */
+.knowledge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.knowledge-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 12px;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 24px;
+  align-items: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.knowledge-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  border-color: var(--el-color-primary-light-5);
+}
+
+.knowledge-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.knowledge-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.knowledge-title {
+  font-size: 15px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.knowledge-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 状态项 */
+.status-list {
+  display: flex;
+  gap: 12px;
+}
+
+.status-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color-light);
+  cursor: pointer;
+  position: relative;
+  min-width: 100px;
+}
+
+.status-item:hover .status-actions {
+  opacity: 1;
+}
+
+.status-item.es.active {
+  background: #dcfce7;
+  border-color: #10b981;
+}
+
+.status-item.vector.active {
+  background: #dbeafe;
+  border-color: #3b82f6;
+}
+
+.status-item.graph.active {
+  background: #ede9fe;
+  border-color: #8b5cf6;
+}
+
+.status-item.pending {
+  background: #fef3c7;
+  border-color: #f59e0b;
+}
+
+.status-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+}
+
+.status-value {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.status-item.es .status-value { color: #10b981; }
+.status-item.vector .status-value { color: #3b82f6; }
+.status-item.graph .status-value { color: #8b5cf6; }
+.status-item.pending .status-value { color: #f59e0b; }
+
+.status-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  position: absolute;
+  bottom: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--el-bg-color);
+  padding: 4px;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+/* 网格视图 */
+.knowledge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  gap: 20px;
+}
+
+.knowledge-grid-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  cursor: pointer;
+  transition: all 0.25s;
+}
+
+.knowledge-grid-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  border-color: var(--el-color-primary-light-5);
+}
+
+.grid-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.grid-card-title {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  flex: 1;
+}
+
+.grid-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.grid-card-status {
+  display: flex;
+  gap: 10px;
+}
+
+.grid-status-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--el-fill-color-light);
+  border: 1px solid var(--el-border-color-light);
+  flex: 1;
+  position: relative;
+}
+
+.grid-status-item:hover .status-actions {
+  opacity: 1;
+}
+
+.grid-status-item.es.active { background: #dcfce7; border-color: #10b981; }
+.grid-status-item.vector.active { background: #dbeafe; border-color: #3b82f6; }
+.grid-status-item.graph.active { background: #ede9fe; border-color: #8b5cf6; }
+.grid-status-item.pending { background: #fef3c7; border-color: #f59e0b; }
+
+.grid-status-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.grid-status-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--el-text-color-secondary);
+}
+
+.grid-status-value {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.grid-status-item.es .grid-status-value { color: #10b981; }
+.grid-status-item.vector .grid-status-value { color: #3b82f6; }
+.grid-status-item.graph .grid-status-value { color: #8b5cf6; }
+.grid-status-item.pending .grid-status-value { color: #f59e0b; }
+
+.grid-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--el-border-color-light);
+}
+
+.grid-card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 分页 */
+.pagination-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+/* 预览弹窗 */
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.preview-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.preview-toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--el-border-color-light);
+  margin-bottom: 16px;
+}
+
+.preview-content {
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--el-fill-color-lighter);
+  border-radius: 8px;
+}
+
+.preview-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--el-text-color-secondary);
+}
+
+.preview-icon {
+  font-size: 64px;
+  opacity: 0.5;
+}
+
+.preview-text {
+  font-size: 16px;
+  font-weight: 500;
+}
+
+.preview-hint {
+  font-size: 14px;
+  opacity: 0.7;
+}
+</style>

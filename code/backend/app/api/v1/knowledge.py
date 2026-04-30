@@ -4,7 +4,7 @@ import uuid
 import asyncio
 import tempfile
 import redis
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Path
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -15,7 +15,8 @@ from app.models.knowledge import Knowledge, UserFavorite, KnowledgeComment
 from app.schemas.knowledge import (
     KnowledgeUploadResponse, KnowledgeItem, KnowledgeDetail,
     KnowledgeListResponse, KnowledgeUpdate, KnowledgeCreate, SearchResponse,
-    HotKnowledgeItem, LatestKnowledgeItem, CommentCreate, CommentItem
+    HotKnowledgeItem, LatestKnowledgeItem, CommentCreate, CommentItem,
+    KnowledgeStatsResponse
 )
 from app.services.parser_service import parser_service
 from app.services.minio_service import minio_service
@@ -145,6 +146,11 @@ async def upload_knowledge(
         tag_list = [t.strip() for t in tags.split(",") if t.strip()]
 
     # 创建知识记录（content不存MySQL，只存ES）
+    # 设置初始索引状态
+    es_status = "indexed" if status == "active" and parsed_content else "pending"
+    vector_status = "done" if status == "active" and parsed_content else "pending"
+    graph_status = "pending"  # 图谱异步处理，初始为pending
+
     knowledge = Knowledge(
         id=knowledge_id,
         title=parsed_title,
@@ -157,7 +163,10 @@ async def upload_knowledge(
         file_type=file_type,
         status=status,
         view_count=0,
-        favorite_count=0
+        favorite_count=0,
+        es_indexed=es_status,
+        vector_indexed=vector_status,
+        graph_indexed=graph_status
     )
     db.add(knowledge)
     db.commit()
@@ -234,7 +243,11 @@ async def create_knowledge_manual(
         user_id=str(current_user.id),
         status="active",
         view_count=0,
-        favorite_count=0
+        favorite_count=0,
+        file_type="html",
+        es_indexed="indexed",
+        vector_indexed="done",
+        graph_indexed="pending"
     )
     db.add(knowledge)
     db.commit()
@@ -325,7 +338,11 @@ def list_knowledge(
                 tags=k.tags or [],
                 view_count=k.view_count,
                 favorite_count=k.favorite_count,
-                created_at=k.created_at
+                created_at=k.created_at,
+                es_indexed=k.es_indexed or "pending",
+                vector_indexed=k.vector_indexed or "pending",
+                graph_indexed=k.graph_indexed or "pending",
+                file_type=k.file_type
             )
             for k in items
         ],
@@ -532,6 +549,32 @@ def get_latest_knowledge(
         user_id=str(current_user.id),
         limit=limit,
         is_admin=is_admin
+    )
+
+
+@router.get("/stats", response_model=KnowledgeStatsResponse)
+def get_knowledge_stats(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取知识统计信息"""
+    is_admin = current_user.is_superuser == 1
+
+    if is_admin:
+        query = db.query(Knowledge)
+    else:
+        query = db.query(Knowledge).filter(Knowledge.user_id == str(current_user.id))
+
+    total = query.count()
+    esIndexed = query.filter(Knowledge.es_indexed == "indexed").count()
+    vectorDone = query.filter(Knowledge.vector_indexed == "done").count()
+    graphDone = query.filter(Knowledge.graph_indexed == "done").count()
+
+    return KnowledgeStatsResponse(
+        total=total,
+        esIndexed=esIndexed,
+        vectorDone=vectorDone,
+        graphDone=graphDone
     )
 
 
@@ -809,3 +852,72 @@ def create_comment(
         content=comment.content,
         created_at=comment.created_at
     )
+
+
+@router.post("/{knowledge_id}/rebuild/{index_type}")
+def rebuild_knowledge_index(
+    knowledge_id: str,
+    index_type: str = Path(..., pattern="^(es|vector|graph)$"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """重建指定知识的索引"""
+    knowledge = db.query(Knowledge).filter(
+        Knowledge.id == knowledge_id,
+        Knowledge.user_id == str(current_user.id)
+    ).first()
+
+    if not knowledge:
+        raise HTTPException(status_code=404, detail="知识不存在")
+
+    # 更新状态为pending
+    if index_type == "es":
+        knowledge.es_indexed = "pending"
+    elif index_type == "vector":
+        knowledge.vector_indexed = "pending"
+    elif index_type == "graph":
+        knowledge.graph_indexed = "pending"
+
+    db.commit()
+
+    return {"message": "已提交重建任务"}
+
+
+@router.delete("/{knowledge_id}/clear/{index_type}")
+def clear_knowledge_index(
+    knowledge_id: str,
+    index_type: str = Path(..., pattern="^(es|vector|graph)$"),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """清空指定知识的索引"""
+    knowledge = db.query(Knowledge).filter(
+        Knowledge.id == knowledge_id,
+        Knowledge.user_id == str(current_user.id)
+    ).first()
+
+    if not knowledge:
+        raise HTTPException(status_code=404, detail="知识不存在")
+
+    # 清空对应索引
+    if index_type == "es":
+        knowledge.es_indexed = "none"
+        try:
+            search_service.delete_knowledge_index(knowledge_id)
+        except Exception:
+            pass
+    elif index_type == "vector":
+        knowledge.vector_indexed = "none"
+        # TODO: 调用Qdrant删除向量
+    elif index_type == "graph":
+        knowledge.graph_indexed = "none"
+        try:
+            if GRAPH_EXTRACTOR_AVAILABLE:
+                extractor = get_graph_extractor()
+                extractor.delete_from_neo4j(knowledge_id)
+        except Exception:
+            pass
+
+    db.commit()
+
+    return {"message": "已清空数据"}

@@ -22,8 +22,8 @@ lastUpdated: 2026-04-30
 | 图谱增强问答 | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
 | Neo4j 集成 | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
 | 图谱浏览功能 | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
-| 知识管理原型 | ✅ | ✅ | — | ✅ | — | 80% |
-| 门户控制台原型 | ✅ | ✅ | — | ✅ | — | 80% |
+| 知识管理新界面 | ✅ | ✅ | ✅ | ✅ | — | 90% |
+| 门户控制台原型 | ✅ | ✅ | — | — | — | 80% |
 
 ---
 
@@ -40,47 +40,46 @@ lastUpdated: 2026-04-30
 | 图谱增强问答 | ✅ | GraphQAChat.vue |
 | Neo4j 集成 | ✅ | neo4j_service + graph_extractor |
 | 图谱浏览 | ✅ | GraphExplorer.vue |
-| 知识管理原型 | ✅ | KnowledgeManageNew.html |
-| 门户控制台原型 | ✅ | Portal.html |
+| 知识管理新界面 | ✅ | KnowledgeManageNew.vue (2026-04-30) |
+| 门户控制台原型 | ✅ | Portal.html (未集成) |
 
 ---
 
 ## 二、2026-04-30 Session 更新
 
-### 2.1 知识管理原型 (KnowledgeManageNew.html)
+### 2.1 知识管理新界面 (KnowledgeManageNew.vue)
 
 | 功能 | 说明 | 状态 |
 |------|------|------|
-| 视图切换 | 列表视图 / 网格视图切换 | ✅ |
-| 状态管理 | 全文检索/语义搜索/知识图谱，每个状态支持 重建/清空 操作 | ✅ |
-| 文件类型 | 支持 PDF、Word、文本 三种类型 | ✅ |
-| 文件上传 | 拖拽上传，支持 .pdf/.doc/.docx，最大 50MB | ✅ |
+| Vue组件开发 | 基于HTML原型转换为Vue3 SFC | ✅ |
+| 路由配置 | `/knowledge/manage-new` | ✅ |
+| 菜单配置 | 侧边栏新增"知识管理(新)" | ✅ |
+| 统计接口 | `GET /knowledge/stats` | ✅ |
+| 重建接口 | `POST /knowledge/{id}/rebuild/{type}` | ✅ |
+| 清空接口 | `DELETE /knowledge/{id}/clear/{type}` | ✅ |
+| 数据模型 | 新增 es_indexed/vector_indexed/graph_indexed 字段 | ✅ |
+| 数据库迁移 | 新增三列到knowledge表 | ✅ |
+| 视图切换 | 列表视图 / 网格视图 | ✅ |
+| 状态管理 | 全文检索/语义搜索/知识图谱，支持重建/清空 | ✅ |
+| 文件类型 | 支持 PDF、Word、文本 | ✅ |
+| 文件上传 | 支持 .pdf/.doc/.docx，最大 50MB | ✅ |
 | 文本添加 | 标题、内容、分类、来源、标签 | ✅ |
-| 删除功能 | 清理所有关联库（MySQL/ES/向量库/图谱/MinIO） | ✅ |
 | 文件预览 | PDF/Word/文本 预览弹窗 | ✅ |
 
-### 2.2 门户控制台原型 (Portal.html)
+### 2.2 后端API
 
-| 模块 | 说明 | 状态 |
+| 接口 | 方法 | 说明 |
 |------|------|------|
-| 快捷操作 | 上传知识、智能问答、知识图谱、文档库 | ✅ |
-| 统计卡片 | 知识总数、ES索引、语义搜索、图谱构建进度 | ✅ |
-| 功能入口 | 4大功能卡片，hover动画 | ✅ |
-| 索引进度 | 进度条展示 | ✅ |
-| 分类分布 | 4分类占比 | ✅ |
-| 最新知识 | 5条最新知识列表 | ✅ |
-| 热门标签 | 8个热门标签云 | ✅ |
-| 存储统计 | PDF/Word文件数、存储空间 | ✅ |
+| `/knowledge/stats` | GET | 获取知识统计（总数、ES索引数、向量数、图谱数） |
+| `/knowledge/{id}/rebuild/{type}` | POST | 重建指定索引（es/vector/graph） |
+| `/knowledge/{id}/clear/{type}` | DELETE | 清空指定索引数据 |
 
-### 2.3 数据存储架构
+### 2.3 数据模型
 
-| 存储介质 | 存储内容 | 说明 |
-|---------|---------|------|
-| MySQL | 元数据 | id/title/type/category/source/tags/file_path/created_at（不存内容） |
-| ES | 内容 | doc/pdf类型存解析文本，text类型存原始文本 |
-| 向量库 | 向量 | 文本向量化用于语义搜索 |
-| 知识图谱 | 实体关系 | 节点和边 |
-| MinIO | 原始文件 | 仅 doc/pdf 类型 |
+Knowledge表字段：
+- `es_indexed`: ES索引状态（indexed/pending/failed/none）
+- `vector_indexed`: 向量索引状态（done/pending/failed/none）
+- `graph_indexed`: 图谱索引状态（done/pending/failed/none）
 
 ---
 
@@ -88,16 +87,14 @@ lastUpdated: 2026-04-30
 
 | 文档 | 路径 |
 |------|------|
-| 知识管理原型设计 | `04-功能详细设计/知识管理-知识管理-原型设计-20260430.md` |
-| 门户控制台原型设计 | `04-功能详细设计/知识管理-门户控制台-原型设计-20260430.md` |
-| 数据存储架构 | `03-技术架构设计/知识模块-数据存储架构-技术架构设计-20260430.md` |
+| 知识管理新界面详细设计 | `04-功能详细设计/知识管理-知识管理-新界面详细设计-20260430.md` |
 | 本次迭代进度 | `08-项目进度/项目-通用-本次迭代内容-进度--20260430.md` |
 
 ---
 
 ## 四、待完成事项
 
+- [ ] 完善知识编辑功能
+- [ ] 实现文件预览功能（PDF.js / mammoth.js）
 - [ ] 将 Portal.html 集成到 Vue 项目中作为实际首页
 - [ ] 对接后端 API 获取真实数据
-- [ ] 实现文件预览功能（PDF.js / mammoth.js）
-- [ ] 完善知识编辑功能

@@ -31,6 +31,10 @@
             <el-icon><Folder /></el-icon>
             <span>知识管理</span>
           </el-menu-item>
+          <el-menu-item index="/knowledge/manage-new">
+            <el-icon><FolderOpened /></el-icon>
+            <span>知识管理(新)</span>
+          </el-menu-item>
         </el-sub-menu>
 
         <el-sub-menu index="assistant">

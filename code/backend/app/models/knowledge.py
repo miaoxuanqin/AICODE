@@ -17,10 +17,14 @@ class Knowledge(Base):
     tags = Column(JSON, nullable=True, default=list)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     file_path = Column(String(1000), nullable=True)
-    file_type = Column(String(20), nullable=True)  # pdf/doc/docx
+    file_type = Column(String(20), nullable=True)  # pdf/doc/docx/html
     view_count = Column(Integer, default=0)
     favorite_count = Column(Integer, default=0)
     status = Column(String(20), default="active")  # active/parse_failed
+    # 索引状态字段
+    es_indexed = Column(String(20), default="pending")  # indexed/pending/failed/none
+    vector_indexed = Column(String(20), default="pending")  # done/pending/failed/none
+    graph_indexed = Column(String(20), default="pending")  # done/pending/failed/none
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

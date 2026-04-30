@@ -104,7 +104,13 @@ export const knowledgeApi = {
   unfavorite: (id) => request.delete(`/knowledge/${id}/favorite`),
   // 评论
   comments: (id) => request.get(`/knowledge/${id}/comments`),
-  addComment: (id, content) => request.post(`/knowledge/${id}/comments`, { content })
+  addComment: (id, content) => request.post(`/knowledge/${id}/comments`, { content }),
+  // 知识统计
+  stats: () => request.get('/knowledge/stats'),
+  // 重建索引
+  rebuild: (id, type) => request.post(`/knowledge/${id}/rebuild/${type}`),
+  // 清空索引
+  clear: (id, type) => request.delete(`/knowledge/${id}/clear/${type}`)
 }
 
 // ============ 问答助手 API ============

@@ -27,6 +27,12 @@ const routes = [
         meta: { title: '知识管理', icon: 'Folder' }
       },
       {
+        path: 'knowledge/manage-new',
+        name: 'KnowledgeManageNew',
+        component: () => import('@/views/knowledge/KnowledgeManageNew.vue'),
+        meta: { title: '知识管理(新)', icon: 'FolderOpened' }
+      },
+      {
         path: 'knowledge/detail/:id',
         name: 'KnowledgeDetail',
         component: () => import('@/views/knowledge/KnowledgeDetail.vue'),

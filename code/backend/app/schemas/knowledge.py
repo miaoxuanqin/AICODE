@@ -22,6 +22,11 @@ class KnowledgeItem(BaseModel):
     view_count: int = 0
     favorite_count: int = 0
     created_at: datetime
+    # 新增字段
+    es_indexed: Optional[str] = "pending"
+    vector_indexed: Optional[str] = "pending"
+    graph_indexed: Optional[str] = "pending"
+    file_type: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -94,3 +99,10 @@ class CommentItem(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class KnowledgeStatsResponse(BaseModel):
+    total: int = 0
+    esIndexed: int = 0
+    vectorDone: int = 0
+    graphDone: int = 0
