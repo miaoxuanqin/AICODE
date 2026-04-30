@@ -365,7 +365,9 @@ class GraphService:
 
         # Step 5: 构建图谱数据
         graph_entities = step1_entities if step1_entities else [{"text": question[:20], "type": "question"}]
+        print(f"[DEBUG] build_graph called with {len(graph_entities)} entities, {len(unique_items[:6])} search_results")
         nodes, edges = self.build_graph(graph_entities, unique_items[:6])
+        print(f"[DEBUG] build_graph returned {len(nodes)} nodes, {len(edges)} edges")
 
         graph_data = {
             "nodes": nodes,
@@ -827,7 +829,7 @@ class GraphService:
         # Step 3: Neo4j 图谱推理（替代原来的关系扩展）
         neo4j_context = self._query_neo4j_context(step1_entities)
 
-        if neo4j_context.get("available"):
+        if neo4j_context.get("available") and len(neo4j_context.get("nodes", [])) > 0:
             reasoning_chain.append({
                 "step": 3,
                 "query": "Neo4j 图谱推理",

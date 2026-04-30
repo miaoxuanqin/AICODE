@@ -91,6 +91,10 @@ class Neo4jService:
         if "created_at" not in properties:
             properties["created_at"] = datetime.now().isoformat()
 
+        # 如果传入了 knowledge_id，添加到属性
+        if knowledge_id:
+            properties["knowledge_id"] = knowledge_id
+
         query = f"""
         MERGE (n:{label} {{name: $name}})
         SET n += $properties
@@ -590,11 +594,19 @@ class Neo4jService:
         Returns:
             实体列表
         """
-        query = f"""
-        MATCH (n:{label})
-        RETURN n
-        LIMIT $limit
-        """
+        if label == "Unknown":
+            query = """
+            MATCH (n)
+            WHERE size(labels(n)) = 0
+            RETURN n
+            LIMIT $limit
+            """
+        else:
+            query = f"""
+            MATCH (n:{label})
+            RETURN n
+            LIMIT $limit
+            """
 
         try:
             with self.driver.session() as session:
@@ -707,9 +719,10 @@ class Neo4jService:
 
     def get_graph_stats(self) -> Dict[str, Any]:
         """获取图谱统计信息"""
-        # 节点统计
+        # 节点统计（排除无标签且无name的引用节点）
         node_query = """
         MATCH (n)
+        WHERE size(labels(n)) > 0 OR n.name IS NOT NULL
         RETURN labels(n)[0] AS label, count(*) AS count
         ORDER BY count DESC
         """
@@ -720,8 +733,12 @@ class Neo4jService:
         RETURN type(r) AS label, count(*) AS count
         """
 
-        # 总节点数
-        total_nodes_query = "MATCH (n) RETURN count(n) AS total"
+        # 总节点数（排除无标签且无name的引用节点）
+        total_nodes_query = """
+        MATCH (n)
+        WHERE size(labels(n)) > 0 OR n.name IS NOT NULL
+        RETURN count(n) AS total
+        """
 
         # 总边数
         total_edges_query = "MATCH ()-[r]-() RETURN count(r) AS total"
@@ -746,6 +763,24 @@ class Neo4jService:
         except Exception as e:
             print(f"get_graph_stats 失败: {e}")
             return {"total_nodes": 0, "total_edges": 0, "by_type": {}}
+
+    def cleanup_node_names(self) -> Dict[str, int]:
+        """清理节点名称中的换行符等空白字符"""
+        query = """
+        MATCH (n)
+        WHERE n.name CONTAINS '\n' OR n.name CONTAINS '\r' OR n.name CONTAINS '\t'
+        WITH n, replace(replace(replace(n.name, '\n', ''), '\r', ''), '\t', '') AS cleaned_name
+        SET n.name = cleaned_name
+        RETURN count(n) AS cleaned_count
+        """
+        try:
+            with self.driver.session() as session:
+                result = session.run(query)
+                record = result.single()
+                return {"cleaned_count": record["cleaned_count"] if record else 0}
+        except Exception as e:
+            print(f"cleanup_node_names 失败: {e}")
+            return {"cleaned_count": 0, "error": str(e)}
 
     def get_center_nodes(self, limit: int = 50) -> Dict[str, Any]:
         """
@@ -780,7 +815,8 @@ class Neo4jService:
                         "id": node_id,
                         "name": node.get("name", ""),
                         "label": list(node.labels)[0] if node.labels else "",
-                        "degree": record["degree"]
+                        "degree": record["degree"],
+                        "knowledge_id": node.get("knowledge_id", None)
                     }
                     nodes_list.append(node_data)
                     node_map[node_id] = node_data
@@ -930,11 +966,21 @@ class Neo4jService:
             LIMIT $limit
             """
         elif label:
-            query = f"""
-            MATCH (n:{label})
-            RETURN n, labels(n)[0] AS label
-            LIMIT $limit
-            """
+            if label == "Unknown":
+                # 查找没有标签且没有name的节点（知识引用节点，不是真正的实体）
+                # 排除只有knowledge_id属性的节点
+                query = """
+                MATCH (n)
+                WHERE size(labels(n)) = 0 AND n.name IS NULL
+                RETURN n, labels(n)[0] AS label
+                LIMIT $limit
+                """
+            else:
+                query = f"""
+                MATCH (n:{label})
+                RETURN n, labels(n)[0] AS label
+                LIMIT $limit
+                """
         else:
             query = """
             MATCH (n)
@@ -950,7 +996,8 @@ class Neo4jService:
                         "id": str(record["n"].id),
                         "name": record["n"].get("name", ""),
                         "label": record["label"],
-                        "matched_on": "name" if keyword else None
+                        "matched_on": "name" if keyword else None,
+                        "knowledge_id": record["n"].get("knowledge_id", None)
                     }
                     for record in result
                 ]
@@ -970,8 +1017,8 @@ class Neo4jService:
         """
         query = """
         MATCH (center)-[r]-(connected)
-        WHERE center.name = $node_name
-        RETURN r, connected, labels(center)[0] AS center_label, labels(connected)[0] AS connected_label,
+        WHERE center.name = $node_name AND connected.name IS NOT NULL
+        RETURN center, r, connected, labels(center)[0] AS center_label, labels(connected)[0] AS connected_label,
                startNode(r) = center AS is_outgoing
         """
 
@@ -986,7 +1033,7 @@ class Neo4jService:
 
                     relations.append({
                         "id": str(rel.id),
-                        "type": type(rel).__name__,
+                        "type": rel.type,  # 使用neo4j的关系类型
                         "direction": "outgoing" if is_outgoing else "incoming",
                         "target_name": connected.get("name", "") if is_outgoing else record["center"].get("name", ""),
                         "target_label": record["connected_label"] if is_outgoing else record["center_label"],

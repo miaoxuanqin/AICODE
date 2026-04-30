@@ -293,6 +293,10 @@ class GraphExtractor:
         entities = []
         relations = []
 
+        def clean_name(name: str) -> str:
+            """清理实体名称，移除换行符和多余空白"""
+            return re.sub(r'[\n\r\t]+', '', name).strip()
+
         try:
             # 提取 JSON
             json_match = re.search(r'\{[\s\S]*\}', result_text)
@@ -304,21 +308,26 @@ class GraphExtractor:
             # 解析实体
             for item in data.get("entities", []):
                 if "type" in item and "name" in item:
-                    entities.append(ExtractedEntity(
-                        name=item["name"],
-                        type=item["type"],
-                        properties={"extracted_by": "llm"}
-                    ))
+                    clean_name_val = clean_name(item["name"])
+                    if clean_name_val:
+                        entities.append(ExtractedEntity(
+                            name=clean_name_val,
+                            type=item["type"],
+                            properties={"extracted_by": "llm"}
+                        ))
 
             # 解析关系
             for item in data.get("relations", []):
                 if all(k in item for k in ["from", "to", "type"]):
-                    relations.append(ExtractedRelation(
-                        from_name=item["from"],
-                        to_name=item["to"],
-                        rel_type=item["type"],
-                        properties={"extracted_by": "llm"}
-                    ))
+                    from_name = clean_name(item["from"])
+                    to_name = clean_name(item["to"])
+                    if from_name and to_name:
+                        relations.append(ExtractedRelation(
+                            from_name=from_name,
+                            to_name=to_name,
+                            rel_type=item["type"],
+                            properties={"extracted_by": "llm"}
+                        ))
 
         except json.JSONDecodeError as e:
             print(f"JSON 解析失败: {e}")

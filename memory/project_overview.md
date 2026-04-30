@@ -3,11 +3,15 @@ name: 住建知识库项目概述
 description: 海南省住建知识库项目，技术栈、架构、关键路径等核心信息
 type: project
 originSessionId: c9493d03-2404-41fa-8b7b-c4643b1160bc
+lastUpdated: 2026-04-30
 ---
-# 海南省住建知识库项目
+# 海南省住建知识库系统
 
 ## 项目定位
 行业知识图谱模块，为住建和综合执法领域提供知识管理、搜索、智能助手服务。
+
+## 系统名称建议
+**海南住建通** — 地域+住建+通达，响亮好记
 
 ## 技术栈
 - 后端：FastAPI + SQLAlchemy + MySQL + Redis
@@ -16,6 +20,7 @@ originSessionId: c9493d03-2404-41fa-8b7b-c4643b1160bc
 - 向量库：Qdrant
 - 图数据库：Neo4j（2026-04-27 新增）
 - 文件存储：MinIO (S3兼容)
+- 大模型：MiniMax-M2.7 / Anthropic
 
 ## 外部服务地址
 | 服务 | 地址 |
@@ -38,7 +43,7 @@ originSessionId: c9493d03-2404-41fa-8b7b-c4643b1160bc
 | 配置项 | 值 |
 |-------|-----|
 | API_BASE | https://api.minimaxi.com/anthropic |
-| AUTH_TOKEN | sk-cp-gPTmjYnqdL4ITzqFsdXjUKxaAwD2xyx2WKeidsK1bMHsqv04X7lFwYlpqaO8WyVGYWAW5OV7yE1rA8lzcHDm3s5GGvYtGTXQk-u1WKjRrLETKSmVqUf2p0g |
+| AUTH_TOKEN | sk-cp-xxx |
 | MODEL | MiniMax-M2.7 |
 
 ## 项目结构
@@ -71,3 +76,21 @@ code/
 6. 热搜词统计（Redis sorted set）
 7. 收藏、评论功能
 8. 图谱增强问答（Graph-RAG，多跳推理，可视化推理路径）
+9. Neo4j 图谱浏览（节点交互、关系导航、路径探索）
+
+## 图谱数据（截至 2026-04-29）
+| 存储 | 数量 | 状态 |
+|------|------|------|
+| MySQL | 42 条 | 正常运行 |
+| Elasticsearch | 42 条 | 已同步 |
+| Qdrant | 42 个向量 | 已同步 |
+| Neo4j | 825 节点 / 1352 边 | 已同步 |
+
+## 关键文件
+| 文件 | 说明 |
+|------|------|
+| `code/backend/app/services/graph_service.py` | 图谱服务，包含 reason 和 reason_with_neo4j |
+| `code/backend/app/services/neo4j_service.py` | Neo4j 操作服务 |
+| `code/backend/app/services/graph_extractor.py` | 实体关系抽取 |
+| `code/frontend/src/views/graph/GraphExplorer.vue` | 图谱浏览页面 |
+| `code/frontend/src/views/graph/GraphQAChat.vue` | 图谱增强问答页面 |

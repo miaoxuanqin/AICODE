@@ -45,6 +45,20 @@
 
           <!-- 图谱容器 -->
           <div class="graph-container" ref="graphContainer">
+            <!-- 加载进度遮罩 -->
+            <div v-if="loadingProgress.show" class="loading-overlay">
+              <div class="loading-content">
+                <el-progress
+                  type="circle"
+                  :percentage="loadingProgress.percent"
+                  :stroke-width="10"
+                  :width="120"
+                  status="success"
+                />
+                <p class="loading-text">正在加载节点...</p>
+                <p class="loading-detail">{{ loadingProgress.current }} / {{ loadingProgress.total }}</p>
+              </div>
+            </div>
             <!-- 图例 -->
             <div class="graph-legend">
               <div
@@ -214,18 +228,24 @@
 
             <!-- 操作按钮 -->
             <div class="detail-actions">
-              <el-button type="primary" size="small" @click="viewNodeDetail">
-                <el-icon><Document /></el-icon>
-                查看详情
-              </el-button>
-              <el-button size="small" @click="expandNode(selectedNode.name)">
-                <el-icon><Plus /></el-icon>
-                展开邻居
-              </el-button>
-              <el-button size="small" @click="findSimilarNodes">
-                <el-icon><Search /></el-icon>
-                发现相似
-              </el-button>
+              <el-tooltip content="查看关联的知识文档详情" placement="top">
+                <el-button type="primary" size="small" @click="viewNodeDetail">
+                  <el-icon><Document /></el-icon>
+                  查看详情
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="显示该节点连接的更多节点" placement="top">
+                <el-button size="small" @click="expandNode(selectedNode.name)">
+                  <el-icon><Plus /></el-icon>
+                  展开邻居
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="搜索名称相似的其他节点" placement="top">
+                <el-button size="small" @click="findSimilarNodes">
+                  <el-icon><Search /></el-icon>
+                  发现相似
+                </el-button>
+              </el-tooltip>
             </div>
 
             <!-- 关联关系 -->
@@ -254,7 +274,7 @@
                   v-for="rec in relatedRecommendations"
                   :key="rec.id"
                   class="recommendation-item"
-                  @click="loadNodeAndFocus(rec.id, rec.name)"
+                  @click="handleRecommendationClick(rec)"
                 >
                   <el-tag size="small" :style="{ background: getNodeColor(rec.label), border: 'none', color: '#fff' }">
                     {{ getNodeTypeName(rec.label) }}
@@ -535,7 +555,7 @@ const handleQuickAction = async (action) => {
       case 'random':
         // 随机获取中心节点
         const centerRes = await graphApi.centerNodes(30)
-        results = (centerRes.nodes || []).map(n => ({ id: n.id, name: n.name, label: n.label }))
+        results = (centerRes.nodes || []).map(n => ({ id: n.id, name: n.name, label: n.label, knowledge_id: n.knowledge_id }))
         break
     }
     if (results.length > 0) {
@@ -577,6 +597,7 @@ const graphStats = reactive({
 
 // 状态
 const loading = ref(false)
+const loadingProgress = ref({ show: false, current: 0, total: 0, percent: 0 })
 const searchKeyword = ref('')
 const typeFilter = ref([])
 const searchResults = ref([])
@@ -677,7 +698,8 @@ const initGraph = async () => {
           label: n.label || n.name,
           title: n.name,
           type: n.label || '',
-          degree: n.degree || 0
+          degree: n.degree || 0,
+          knowledge_id: n.knowledge_id
         }))
     }
     if (centerRes.edges) {
@@ -721,12 +743,13 @@ const renderNetwork = () => {
       label: (n.name || n.label || '').length > 15 ? (n.name || n.label || '').slice(0, 15) + '...' : (n.name || n.label || ''),
       title: n.title || n.name || n.label,
       color: {
-        background: getNodeColor(n.type),
-        border: '#ffffff',
-        highlight: { background: getNodeColor(n.type), border: '#409eff' }
+        background: n.isNew ? '#ff6b35' : getNodeColor(n.type),
+        border: n.isNew ? '#ff0000' : '#ffffff',
+        highlight: { background: '#409eff', border: '#409eff' }
       },
       font: { color: '#ffffff', size: 12, strokeWidth: 2, strokeColor: '#000000' },
-      type: n.type
+      borderWidth: n.isNew ? 4 : 1,
+      borderWidthSelected: 4
     })))
 
     // 去重边
@@ -750,7 +773,7 @@ const renderNetwork = () => {
       { nodes: visNodes, edges: visEdges },
       {
         physics: { enabled: true, solver: 'forceAtlas2Based' },
-        nodes: { shape: 'dot', size: 20 },
+        nodes: { shape: 'dot' },
         edges: { smooth: { type: 'continuous' } },
         interaction: { hover: true, tooltipDelay: 200 }
       }
@@ -891,11 +914,17 @@ const selectNode = async (node) => {
 
 // 查看节点详情（跳转到知识详情页）
 const viewNodeDetail = () => {
-  if (!selectedNode.value || !selectedNode.value.id) {
-    ElMessage.warning('节点信息不完整')
+  if (!selectedNode.value) {
+    ElMessage.warning('请先选择一个节点')
     return
   }
-  router.push(`/knowledge/detail/${selectedNode.value.id}`)
+  // 如果节点有关联的知识ID，跳转到知识详情页
+  if (selectedNode.value.knowledge_id) {
+    router.push(`/knowledge/detail/${selectedNode.value.knowledge_id}`)
+  } else {
+    // 否则显示节点信息
+    ElMessage.info(`节点名称: ${selectedNode.value.name}\n类型: ${getNodeTypeName(selectedNode.value.label)}\nID: ${selectedNode.value.id}`)
+  }
 }
 
 // 查找相似节点
@@ -929,9 +958,9 @@ const loadRelatedRecommendations = async () => {
   try {
     const res = await graphApi.neighbors(selectedNode.value.name, 2)
     if (res.nodes) {
-      // 获取二级邻居作为推荐
+      // 获取二级邻居作为推荐（过滤掉无名称的节点）
       const recommendations = res.nodes
-        .filter(n => n.id !== selectedNode.value.id)
+        .filter(n => n.id !== selectedNode.value.id && n.name)
         .slice(0, 5)
         .map(n => ({ id: n.id, name: n.name, label: n.label }))
       relatedRecommendations.value = recommendations
@@ -952,35 +981,59 @@ const expandNode = async (nodeName) => {
     if (res.nodes) {
       // 合并新节点
       const existingIds = new Set(nodes.value.map(n => n.id))
-      const newNodes = res.nodes.filter(n => !existingIds.has(n.id))
-      newNodes.forEach(n => {
-        if (!n.name) return // 跳过无名称的节点
-        nodes.value.push({
-          id: n.id,
-          name: n.name,
-          label: n.label || n.name,
-          title: n.title || n.name,
-          type: n.label || '',
-          degree: 0
-        })
-      })
+      const newNodes = res.nodes.filter(n => !existingIds.has(n.id) && n.name)
+      const allNeighbors = res.nodes.filter(n => n.name) // 所有邻居
+      const newNodeIds = new Set()
 
-      // 合并新边
-      const existingEdgeIds = new Set(edges.value.map(e => e.id))
-      const newEdges = res.edges.filter(e => !existingEdgeIds.has(e.id))
-      newEdges.forEach(e => {
-        edges.value.push({
-          id: e.id,
-          from: e.source,
-          to: e.target,
-          label: getRelationName(e.type)
+      if (newNodes.length > 0) {
+        newNodes.forEach(n => {
+          nodes.value.push({
+            id: n.id,
+            name: n.name,
+            label: n.label || n.name,
+            title: n.title || n.name,
+            type: n.label || '',
+            degree: 0,
+            isNew: true
+          })
+          newNodeIds.add(n.id)
         })
-      })
 
-      // 重新渲染
-      await nextTick()
-      renderNetwork()
-      ElMessage.success(`已展开 ${newNodes.length} 个新节点`)
+        // 合并新边
+        const existingEdgeIds = new Set(edges.value.map(e => e.id))
+        const newEdges = res.edges.filter(e => !existingEdgeIds.has(e.id))
+        newEdges.forEach(e => {
+          edges.value.push({
+            id: e.id,
+            from: e.source,
+            to: e.target,
+            label: getRelationName(e.type)
+          })
+        })
+
+        await nextTick()
+        renderNetwork()
+
+        if (network && newNodeIds.size > 0) {
+          const firstNewId = Array.from(newNodeIds)[0]
+          network.focus(firstNewId, { scale: 1.5, animation: { duration: 1000, easingFunction: 'easeInOutQuad' } })
+        }
+
+        ElMessage.success(`已添加 ${newNodes.length} 个新节点和 ${newEdges.length} 条新关系\n新节点为橙色，邻居关系高亮显示`)
+
+        setTimeout(() => {
+          newNodeIds.forEach(nodeId => {
+            const node = nodes.value.find(n => n.id === nodeId)
+            if (node) node.isNew = false
+          })
+          // 只更新节点颜色，不重新创建网络
+          updateNodeColors()
+        }, 3000)
+      } else {
+        // 没有新节点，高亮邻居关系
+        ElMessage.info(`该节点有 ${allNeighbors.length} 个邻居，蓝色高亮显示`)
+        highlightNodeNeighborsDirect(nodeName, allNeighbors)
+      }
     }
   } catch (error) {
     console.error('展开邻居失败:', error)
@@ -988,6 +1041,88 @@ const expandNode = async (nodeName) => {
   } finally {
     loading.value = false
   }
+}
+
+// 直接更新节点颜色（不重新创建网络）
+const updateNodeColors = () => {
+  if (!network) return
+  const allNodes = network.body.data.nodes.get()
+  allNodes.forEach(node => {
+    const originalNode = nodes.value.find(n => n.id === node.id)
+    network.body.data.nodes.update({
+      id: node.id,
+      color: {
+        background: originalNode?.isNew ? '#ff6b35' : getNodeColor(node.type || originalNode?.type),
+        border: '#ffffff',
+        highlight: { background: '#409eff', border: '#409eff' }
+      },
+      borderWidth: 1,
+      font: { color: '#ffffff', size: 12, strokeWidth: 2, strokeColor: '#000000' }
+    })
+  })
+}
+
+// 高亮单个节点
+const highlightSingleNode = (nodeId) => {
+  console.log('highlightSingleNode 被调用, nodeId:', nodeId, 'network:', !!network)
+  if (!network) return
+
+  const allNodes = network.body.data.nodes.get()
+  console.log('当前网络节点数:', allNodes.length)
+  const targetNode = allNodes.find(n => n.id === nodeId)
+  console.log('目标节点是否存在:', !!targetNode)
+
+  allNodes.forEach(node => {
+    const originalNode = nodes.value.find(n => n.id === node.id)
+    const isHighlighted = node.id === nodeId
+    network.body.data.nodes.update({
+      id: node.id,
+      color: {
+        background: isHighlighted ? '#67c23a' : (originalNode?.isNew ? '#ff6b35' : getNodeColor(node.type || originalNode?.type)),
+        border: isHighlighted ? '#000000' : '#ffffff',
+        highlight: { background: '#67c23a', border: '#000000' }
+      },
+      borderWidth: isHighlighted ? 5 : 1,
+      font: { color: isHighlighted ? '#ffffff' : '#ffffff', size: isHighlighted ? 16 : 12, strokeWidth: 3, strokeColor: '#000000' }
+    })
+  })
+
+  // 3秒后恢复颜色
+  setTimeout(() => {
+    updateNodeColors()
+  }, 3000)
+}
+
+// 高亮节点及其邻居（不重新创建网络）
+const highlightNodeNeighborsDirect = (nodeName, neighbors) => {
+  if (!network) return
+
+  const centerNode = nodes.value.find(n => n.name === nodeName)
+  if (!centerNode) return
+
+  const neighborIds = new Set(neighbors.map(n => n.id))
+  neighborIds.add(centerNode.id)
+
+  const allNodes = network.body.data.nodes.get()
+  allNodes.forEach(node => {
+    const originalNode = nodes.value.find(n => n.id === node.id)
+    const isHighlighted = neighborIds.has(node.id)
+    network.body.data.nodes.update({
+      id: node.id,
+      color: {
+        background: isHighlighted ? '#67c23a' : (originalNode?.isNew ? '#ff6b35' : getNodeColor(node.type || originalNode?.type)), // 高亮用绿色
+        border: isHighlighted ? '#000000' : '#ffffff',
+        highlight: { background: '#67c23a', border: '#000000' }
+      },
+      borderWidth: isHighlighted ? 5 : 1,
+      font: { color: isHighlighted ? '#ffffff' : '#ffffff', size: isHighlighted ? 16 : 12, strokeWidth: 3, strokeColor: '#000000' }
+    })
+  })
+
+  // 3秒后恢复颜色
+  setTimeout(() => {
+    updateNodeColors()
+  }, 3000)
 }
 
 // 重置视图
@@ -1039,7 +1174,16 @@ const loadResultsToGraph = async (results) => {
   const newEdges = []
   const nodeIds = new Set()
 
+  // 显示加载进度
+  const total = results.length
+  let loaded = 0
+  loadingProgress.value = { show: true, current: 0, total, percent: 0 }
+
   for (const result of results) {
+    loaded++
+    loadingProgress.value.current = loaded
+    loadingProgress.value.percent = Math.round((loaded / total) * 100)
+
     console.log('处理节点:', result)
     if (!nodeIds.has(result.id) && result.name) {
       newNodes.push({
@@ -1048,7 +1192,8 @@ const loadResultsToGraph = async (results) => {
         label: result.label || result.name,
         title: result.name,
         type: result.label || '',
-        degree: 0
+        degree: 0,
+        knowledge_id: result.knowledge_id
       })
       nodeIds.add(result.id)
     }
@@ -1091,6 +1236,9 @@ const loadResultsToGraph = async (results) => {
   edges.value = newEdges
   console.log('设置后的节点:', nodes.value.length, '边:', edges.value.length)
 
+  // 隐藏加载进度
+  loadingProgress.value.show = false
+
   // 等待 DOM 更新后渲染
   await nextTick()
   if (network) {
@@ -1132,8 +1280,10 @@ const handleSearchResultClick = (result) => {
 
 // 加载节点并聚焦
 const loadNodeAndFocus = async (nodeId, nodeName) => {
+  console.log('loadNodeAndFocus called:', nodeId, nodeName)
   try {
     const res = await graphApi.neighbors(nodeName, 1)
+    console.log('neighbors API 返回:', res.nodes?.length, 'nodes')
     if (res.nodes) {
       const newNodes = res.nodes.filter(n => !nodes.value.find(existing => existing.id === n.id))
       newNodes.forEach(n => {
@@ -1161,18 +1311,27 @@ const loadNodeAndFocus = async (nodeId, nodeName) => {
       }
 
       await nextTick()
+      console.log('准备 renderNetwork, 当前 nodes:', nodes.value.length)
       renderNetwork()
 
       // 聚焦到目标节点
       const targetNode = nodes.value.find(n => n.name === nodeName)
+      console.log('目标节点:', targetNode)
       if (targetNode) {
         selectNode(targetNode)
         if (network) {
+          console.log('聚焦到节点:', targetNode.id)
           network.focus(targetNode.id, { scale: 1.5, animation: true })
         }
+        // 高亮显示
+        setTimeout(() => {
+          console.log('调用 highlightSingleNode:', targetNode.id)
+          highlightSingleNode(targetNode.id)
+        }, 600)
       }
     }
   } catch (error) {
+    console.error('loadNodeAndFocus 失败:', error)
     ElMessage.error('加载节点失败')
   }
 }
@@ -1180,31 +1339,52 @@ const loadNodeAndFocus = async (nodeId, nodeName) => {
 // 处理关系点击
 const handleRelationClick = (rel) => {
   const targetName = rel.direction === 'outgoing' ? rel.target_name : rel.source_name
+  // 跳过空名称的关系（系统引用节点，如抽取自关系指向的知识节点）
+  if (!targetName) {
+    ElMessage.info('该关系指向系统引用节点，无法导航')
+    return
+  }
   const targetNode = nodes.value.find(n => n.name === targetName)
   if (targetNode) {
     selectNode(targetNode)
     if (network) {
       network.focus(targetNode.id, { scale: 1.5, animation: true })
+      highlightSingleNode(targetNode.id)
     }
   } else {
     loadNodeAndFocus(null, targetName)
   }
 }
 
+// 处理推荐项目点击
+const handleRecommendationClick = (rec) => {
+  const targetNode = nodes.value.find(n => n.id === rec.id || n.name === rec.name)
+  if (targetNode) {
+    selectNode(targetNode)
+    if (network) {
+      network.focus(targetNode.id, { scale: 1.5, animation: true })
+      highlightSingleNode(targetNode.id)
+    }
+  } else {
+    loadNodeAndFocus(rec.id, rec.name)
+  }
+}
+
 // 图例点击处理
 const handleLegendClick = async (typeLabel) => {
   console.log('handleLegendClick 被调用, typeLabel:', typeLabel)
-  ElMessage.info(`正在加载${typeLabel}类型节点...`)
   await toggleTypeFilter(typeLabel)
 }
 
 // 切换类型过滤
 const toggleTypeFilter = async (type) => {
   console.log('toggleTypeFilter 被调用, type:', type)
-  // 点击图例时，直接加载该类型的前20个节点
-  console.log('准备调用 searchNodes API')
+  // 点击图例时，根据统计信息加载该类型的所有节点
+  const typeCount = graphStats.by_type?.[type] || 50
+  const limit = Math.min(typeCount, 100) // 最多加载100个
+  console.log('准备调用 searchNodes API, limit:', limit)
   try {
-    const res = await graphApi.searchNodes('', type, 20)
+    const res = await graphApi.searchNodes('', type, limit)
     console.log('searchNodes 返回:', res)
     if (res.results?.length > 0) {
       console.log('准备调用 loadResultsToGraph')
@@ -1348,6 +1528,37 @@ onUnmounted(() => {
   background: linear-gradient(135deg, #f5f7fa 0%, #e4e7ed 100%);
   border-radius: 8px;
   min-height: 500px;
+}
+
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  border-radius: 8px;
+}
+
+.loading-content {
+  text-align: center;
+}
+
+.loading-text {
+  margin-top: 16px;
+  font-size: 16px;
+  color: #303133;
+  font-weight: 500;
+}
+
+.loading-detail {
+  margin-top: 8px;
+  font-size: 14px;
+  color: #909399;
 }
 
 .network-canvas {

@@ -264,6 +264,23 @@ def get_graph_stats(current_user = Depends(get_current_user)):
         return {"available": False, "message": str(e)}
 
 
+@router.post("/explorer/cleanup")
+def cleanup_graph_nodes(current_user = Depends(get_current_user)):
+    """清理节点名称中的空白字符（换行符等）"""
+    if not NEO4J_AVAILABLE:
+        return {"error": "Neo4j 驱动未安装"}
+
+    if not current_user.is_superuser == 1:
+        return {"error": "需要管理员权限"}
+
+    try:
+        neo4j = get_neo4j_service()
+        result = neo4j.cleanup_node_names()
+        return {"success": True, **result}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @router.get("/explorer/center")
 def get_center_nodes(
     limit: int = Query(50, ge=10, le=100, description="返回节点数"),
@@ -303,7 +320,7 @@ def get_node_neighbors(
 def search_graph_nodes(
     q: str = Query("", min_length=0, description="搜索关键词"),
     label: str = Query(None, description="按类型筛选"),
-    limit: int = Query(20, ge=1, le=50, description="返回数量"),
+    limit: int = Query(20, ge=1, le=200, description="返回数量"),
     current_user = Depends(get_current_user)
 ):
     """搜索实体"""
