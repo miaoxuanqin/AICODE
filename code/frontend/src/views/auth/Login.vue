@@ -2,6 +2,7 @@
   <div class="login-container">
     <div class="login-box">
       <div class="login-header">
+        <el-icon><OfficeBuilding /></el-icon>
         <h1>海南省住建知识库</h1>
         <p>行业知识图谱平台</p>
       </div>
@@ -143,58 +144,12 @@ const handleLogin = async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: var(--primary-gradient);
   position: relative;
   overflow: hidden;
 }
 
-.login-box {
-  width: 420px;
-  padding: 40px;
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  position: relative;
-  z-index: 10;
-}
-
-.login-header {
-  text-align: center;
-  margin-bottom: 32px;
-}
-
-.login-header h1 {
-  margin: 0 0 8px 0;
-  font-size: 26px;
-  color: #303133;
-}
-
-.login-header p {
-  margin: 0;
-  color: #909399;
-  font-size: 14px;
-}
-
-.login-form {
-  margin-top: 24px;
-}
-
-.login-btn {
-  width: 100%;
-}
-
-.login-footer {
-  text-align: center;
-  margin-top: 24px;
-  color: #c0c4cc;
-  font-size: 12px;
-}
-
-.login-footer p {
-  margin: 0;
-}
-
-/* 背景装饰 */
+/* 背景装饰 - 几何图形 */
 .bg-decoration {
   position: absolute;
   width: 100%;
@@ -207,28 +162,154 @@ const handleLogin = async () => {
 .circle {
   position: absolute;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(4px);
 }
 
 .circle-1 {
-  width: 400px;
-  height: 400px;
-  top: -100px;
-  right: -100px;
+  width: 500px;
+  height: 500px;
+  top: -150px;
+  right: -150px;
+  animation: float 20s ease-in-out infinite;
 }
 
 .circle-2 {
-  width: 300px;
-  height: 300px;
-  bottom: -50px;
-  left: -50px;
+  width: 350px;
+  height: 350px;
+  bottom: -100px;
+  left: -100px;
+  animation: float 15s ease-in-out infinite reverse;
 }
 
 .circle-3 {
   width: 200px;
   height: 200px;
   top: 50%;
-  left: 50%;
+  left: 10%;
   transform: translate(-50%, -50%);
+  animation: pulse 8s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(20px, -20px); }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.08; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 0.15; transform: translate(-50%, -50%) scale(1.1); }
+}
+
+.login-box {
+  width: 440px;
+  padding: 48px 40px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-xl);
+  position: relative;
+  z-index: 10;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+/* 内光效果 */
+.login-box::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: var(--border-radius-lg);
+  box-shadow: inset 0 2px 20px rgba(30, 77, 123, 0.08);
+  pointer-events: none;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 36px;
+}
+
+.login-header h1 {
+  margin: 0 0 10px 0;
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--primary-color);
+  letter-spacing: 2px;
+}
+
+.login-header p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.login-form {
+  margin-top: 28px;
+}
+
+/* 输入框样式优化 */
+.login-form :deep(.el-input__wrapper) {
+  padding: 14px 16px;
+  border-radius: var(--border-radius-sm);
+  box-shadow: 0 0 0 1px var(--border-color);
+  transition: all var(--transition-fast);
+}
+
+.login-form :deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 2px rgba(30, 77, 123, 0.15);
+}
+
+.login-form :deep(.el-input__wrapper:focus-within) {
+  box-shadow: 0 0 0 2px rgba(30, 77, 123, 0.25);
+}
+
+.login-form :deep(.el-input__prefix) {
+  color: var(--text-light);
+}
+
+.login-btn {
+  width: 100%;
+  height: 48px;
+  font-size: 16px;
+  font-weight: 500;
+  border-radius: var(--border-radius-sm);
+  background: var(--primary-gradient);
+  border: none;
+  transition: all var(--transition-fast);
+}
+
+.login-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(30, 77, 123, 0.35);
+}
+
+.login-btn:active {
+  transform: translateY(0);
+}
+
+.login-footer {
+  text-align: center;
+  margin-top: 28px;
+  color: var(--text-light);
+  font-size: 12px;
+}
+
+.login-footer p {
+  margin: 0;
+}
+
+/* 金色logo图标 */
+.login-header :deep(.el-icon) {
+  font-size: 42px;
+  color: var(--accent-light);
+  margin-bottom: 12px;
+  filter: drop-shadow(0 3px 6px rgba(218, 165, 32, 0.3));
+}
+
+/* 记住密码checkbox */
+.login-form :deep(.el-checkbox__label) {
+  color: var(--text-secondary);
 }
 </style>

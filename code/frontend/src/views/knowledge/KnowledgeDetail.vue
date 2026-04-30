@@ -295,7 +295,17 @@ onMounted(() => {
 
 .header-actions {
   display: flex;
-  gap: 8px;
+  gap: 10px;
+}
+
+.header-actions :deep(.el-button) {
+  border-radius: var(--border-radius-sm);
+  transition: all var(--transition-fast);
+}
+
+.header-actions :deep(.el-button:hover) {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .content-wrapper {
@@ -304,92 +314,157 @@ onMounted(() => {
 
 .main-content {
   padding: 32px;
+  border-radius: var(--border-radius);
 }
 
 .title {
-  margin: 0 0 16px 0;
-  font-size: 28px;
-  color: #303133;
+  margin: 0 0 18px 0;
+  font-size: 30px;
+  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 .meta {
   display: flex;
   align-items: center;
-  gap: 20px;
-  color: #909399;
+  gap: 24px;
+  color: var(--text-secondary);
   font-size: 14px;
   flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .meta-item {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+}
+
+.meta-item .el-icon {
+  color: var(--primary-color);
 }
 
 .content-body {
   line-height: 1.8;
   font-size: 15px;
-  color: #303133;
+  color: var(--text-primary);
+  padding: 24px 0;
 }
 
 .content-body p {
-  margin: 12px 0;
+  margin: 14px 0;
 }
 
 .tags {
-  margin-top: 16px;
+  margin-top: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .info-card {
   font-size: 14px;
+  border-radius: var(--border-radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+}
+
+.info-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.info-card :deep(.el-card__header) {
+  background: var(--primary-gradient);
+  color: #fff;
+  padding: 14px 18px;
+  font-weight: 600;
+  border-bottom: none;
 }
 
 .related-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .related-item {
   cursor: pointer;
-  padding: 8px;
-  border-radius: 4px;
-  transition: background 0.3s;
+  padding: 10px;
+  border-radius: var(--border-radius-sm);
+  transition: all var(--transition-fast);
+  border: 1px solid transparent;
 }
 
 .related-item:hover {
-  background: #f5f7fa;
+  background: var(--bg-color);
+  border-color: var(--accent-light);
+}
+
+.related-item :deep(.el-tag) {
+  margin-bottom: 8px;
 }
 
 .related-item p {
-  margin: 8px 0 0 0;
+  margin: 0;
   font-size: 14px;
-  color: #606266;
+  color: var(--text-primary);
+  line-height: 1.5;
 }
 
+/* 评论区样式 */
 .comments {
   margin-top: 24px;
-  padding: 24px;
+  padding: 28px;
+  border-radius: var(--border-radius);
 }
 
 .comments h3 {
   margin: 0 0 20px 0;
+  font-size: 18px;
+  color: var(--text-primary);
+  font-weight: 600;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--accent-light);
+  display: inline-block;
 }
 
 .comment-form {
-  margin-bottom: 24px;
+  margin-bottom: 28px;
+  padding: 20px;
+  background: var(--bg-color);
+  border-radius: var(--border-radius);
+}
+
+.comment-form :deep(.el-textarea__inner) {
+  border-radius: var(--border-radius-sm);
+}
+
+.comment-form :deep(.el-button) {
+  margin-top: 12px;
+  border-radius: var(--border-radius-sm);
 }
 
 .comment-list {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 24px;
 }
 
 .comment-item {
   display: flex;
-  gap: 12px;
+  gap: 14px;
+  padding: 16px;
+  background: var(--bg-color);
+  border-radius: var(--border-radius);
+  transition: all var(--transition-fast);
+}
+
+.comment-item:hover {
+  background: #fff;
+  box-shadow: var(--shadow-sm);
 }
 
 .comment-body {
@@ -399,27 +474,33 @@ onMounted(() => {
 .comment-header {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .comment-user {
   font-weight: 600;
-  color: #303133;
+  color: var(--primary-color);
+  font-size: 14px;
 }
 
 .comment-time {
-  color: #c0c4cc;
-  font-size: 13px;
+  color: var(--text-light);
+  font-size: 12px;
 }
 
 .comment-content {
   margin: 0;
-  color: #606266;
+  color: var(--text-secondary);
   line-height: 1.6;
+  font-size: 14px;
+}
+
+.comment-item :deep(.el-avatar) {
+  border: 2px solid var(--primary-light);
 }
 
 .card-container {
   background: #fff;
-  border-radius: 8px;
+  border-radius: var(--border-radius);
 }
 </style>

@@ -78,6 +78,39 @@ code/
 8. 图谱增强问答（Graph-RAG，多跳推理，可视化推理路径）
 9. Neo4j 图谱浏览（节点交互、关系导航、路径探索）
 
+## 数据存储架构（2026-04-30 更新）
+
+| 存储介质 | 存储内容 | 说明 |
+|---------|---------|------|
+| MySQL | 元数据 | id/title/type/category/source/tags/file_path/created_at（不存内容） |
+| ES | 内容 | doc/pdf类型存解析文本，text类型存原始文本 |
+| 向量库 | 向量 | 文本向量化用于语义搜索 |
+| 知识图谱 | 实体关系 | 节点和边 |
+| MinIO | 原始文件 | 仅 doc/pdf 类型 |
+
+### 知识类型
+
+| 类型 | 值 | 存储 |
+|------|-----|------|
+| PDF文档 | `pdf` | MinIO + ES解析文本 |
+| Word文档 | `doc` | MinIO + ES解析文本 |
+| 文本 | `text` | ES原始文本 |
+
+### 索引状态
+
+| 状态字段 | 说明 | 值 |
+|---------|------|-----|
+| `fullTextStatus` | ES索引状态 | `indexed`/`pending` |
+| `vectorStatus` | 向量处理状态 | `done`/`pending` |
+| `graphStatus` | 图谱构建状态 | `done`/`pending` |
+
+## 原型文件
+
+| 文件 | 说明 |
+|------|------|
+| `code/frontend/src/views/knowledge/KnowledgeManageNew.html` | 知识管理新界面原型 |
+| `code/frontend/src/views/Portal.html` | 门户控制台原型 |
+
 ## 图谱数据（截至 2026-04-29）
 | 存储 | 数量 | 状态 |
 |------|------|------|
