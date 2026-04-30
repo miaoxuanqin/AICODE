@@ -557,7 +557,14 @@ const viewKnowledge = (item) => {
   window.location.href = `/knowledge/detail/${item.id}`
 }
 
-const clearHistory = () => {
+const clearHistory = async () => {
+  if (currentSessionId.value) {
+    try {
+      await qaApi.clearMessages(currentSessionId.value)
+    } catch (e) {
+      console.error('清除会话失败:', e)
+    }
+  }
   messages.value = []
   currentSessionId.value = null
   relatedKnowledge.value = []

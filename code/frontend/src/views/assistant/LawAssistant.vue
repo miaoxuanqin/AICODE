@@ -546,7 +546,14 @@ const viewCase = (item) => {
   inputMessage.value = item.title
 }
 
-const clearHistory = () => {
+const clearHistory = async () => {
+  if (currentSessionId.value) {
+    try {
+      await qaApi.clearMessages(currentSessionId.value)
+    } catch (e) {
+      console.error('清除会话失败:', e)
+    }
+  }
   messages.value = []
   currentSessionId.value = null
   relatedKnowledge.value = []
