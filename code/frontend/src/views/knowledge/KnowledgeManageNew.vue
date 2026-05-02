@@ -91,7 +91,7 @@
       <el-select v-model="filters.type" placeholder="全部类型" clearable @change="handleFilter" style="width: 120px;">
         <el-option label="全部类型" value="" />
         <el-option label="PDF文档" value="pdf" />
-        <el-option label="Word文档" value="doc" />
+        <el-option label="Word文档" value="docx" />
         <el-option label="文本" value="text" />
       </el-select>
       <el-select v-model="filters.category" placeholder="全部分类" clearable @change="handleFilter" style="width: 140px;">
@@ -146,7 +146,7 @@
         <div class="knowledge-main">
           <div class="knowledge-header">
             <el-tag :type="getTypeIcon(item.file_type)" size="small">
-              {{ item.file_type === 'pdf' ? '📕 PDF' : item.file_type === 'html' ? '📝 文本' : '📄 Word' }}
+              {{ item.file_type === 'pdf' ? '📕 PDF' : item.file_type === 'html' ? '📝 文本' : item.file_type === 'docx' || item.file_type === 'doc' ? '📄 Word' : '📝 文本' }}
             </el-tag>
             <el-tag :type="getCategoryType(item.category)" size="small">{{ item.category_name }}</el-tag>
           </div>
@@ -222,7 +222,7 @@
       >
         <div class="grid-card-header">
           <div class="grid-card-title">{{ item.title }}</div>
-          <el-tag size="small">{{ item.file_type === 'pdf' ? 'PDF' : item.file_type === 'html' ? '文本' : 'Word' }}</el-tag>
+          <el-tag size="small">{{ item.file_type === 'pdf' ? 'PDF' : item.file_type === 'html' ? '文本' : (item.file_type === 'docx' || item.file_type === 'doc') ? 'Word' : '文本' }}</el-tag>
         </div>
         <div class="grid-card-meta">
           <el-tag :type="getCategoryType(item.category)" size="small">{{ item.category_name }}</el-tag>
@@ -306,8 +306,10 @@
             :on-change="handleFileSelect"
             :on-remove="handleFileRemove"
             accept=".pdf,.doc,.docx"
+            drag
           >
-            <el-button type="primary">选择文件</el-button>
+            <el-icon class="el-icon--upload"><upload-filled /></el-icon>
+            <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
             <template #tip>
               <div class="el-upload__tip">支持 PDF、Word 格式，大小不超过 50MB</div>
             </template>
@@ -333,23 +335,20 @@
       </el-form>
       <template #footer>
         <el-button @click="showUploadDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleUpload" :disabled="!uploadForm.file || !uploadForm.category">上传</el-button>
+        <el-button type="primary" :loading="uploading" @click="handleUpload">上传</el-button>
       </template>
     </el-dialog>
 
     <!-- 文本弹窗 -->
-    <el-dialog v-model="showTextDialog" title="手动添加知识" width="600px">
+    <el-dialog v-model="showTextDialog" title="手动添加知识" width="700px">
       <el-form ref="textFormRef" :model="textForm" label-width="80px">
         <el-form-item label="标题" required>
           <el-input v-model="textForm.title" placeholder="请输入知识标题" />
         </el-form-item>
         <el-form-item label="内容" required>
-          <el-input
-            v-model="textForm.content"
-            type="textarea"
-            :rows="6"
-            placeholder="请输入知识内容"
-          />
+          <div class="editor-wrapper">
+            <QuillEditor v-model:content="textForm.content" contentType="html" theme="snow" toolbar="full" />
+          </div>
         </el-form-item>
         <el-form-item label="分类" required>
           <el-select v-model="textForm.category" placeholder="请选择分类">
@@ -368,7 +367,7 @@
       </el-form>
       <template #footer>
         <el-button @click="showTextDialog = false">取消</el-button>
-        <el-button type="primary" @click="handleTextSubmit" :disabled="!textForm.title || !textForm.content || !textForm.category">保存</el-button>
+        <el-button type="primary" :loading="submitting" @click="handleTextSubmit">保存</el-button>
       </template>
     </el-dialog>
 
@@ -378,21 +377,28 @@
         <div class="preview-title">
           <span>{{ previewItem.title }}</span>
           <el-tag :type="previewItem.file_type === 'pdf' ? 'danger' : 'primary'">
-            {{ previewItem.file_type === 'pdf' ? 'PDF文档' : previewItem.file_type === 'html' ? '文本' : 'Word文档' }}
+            {{ previewItem.file_type === 'pdf' ? 'PDF文档' : previewItem.file_type === 'html' ? '文本' : (previewItem.file_type === 'docx' || previewItem.file_type === 'doc') ? 'Word文档' : '文本' }}
           </el-tag>
         </div>
       </div>
-      <div class="preview-toolbar">
-        <el-button size="small">放大</el-button>
-        <el-button size="small">缩小</el-button>
-        <el-button size="small">下载</el-button>
-        <el-button size="small">打印</el-button>
-      </div>
       <div class="preview-content">
-        <div class="preview-placeholder">
-          <el-icon class="preview-icon"><Document /></el-icon>
-          <div class="preview-text">{{ previewItem.file_type === 'pdf' ? 'PDF 文件预览' : 'Word 文档预览' }}</div>
-          <div class="preview-hint">{{ previewItem.title }}</div>
+        <!-- 文本内容显示 -->
+        <div v-if="!previewItem.file_type || previewItem.file_type === 'html' || previewItem.file_type === 'unknown'" class="text-preview" v-html="previewItem.content || '<p style=\'color:#999;text-align:center\'>内容加载中...</p>'"></div>
+        <!-- PDF预览 -->
+        <div v-if="previewItem.file_type === 'pdf'" id="pdf-preview-container" class="pdf-preview-container"></div>
+        <div v-if="previewItem.file_type === 'pdf' && previewItem.loading" class="preview-loading">
+          <el-icon class="is-loading"><Document /></el-icon>
+          <div>正在加载PDF...</div>
+        </div>
+        <!-- Word预览 -->
+        <div v-if="(previewItem.file_type === 'docx' || previewItem.file_type === 'doc') && previewItem.loading" class="preview-loading">
+          <el-icon class="is-loading"><Document /></el-icon>
+          <div>正在加载Word...</div>
+        </div>
+        <div v-if="(previewItem.file_type === 'docx' || previewItem.file_type === 'doc') && !previewItem.loading" class="word-preview text-preview" v-html="previewItem.wordContent"></div>
+        <!-- 文件下载按钮 -->
+        <div v-if="previewItem.file_type === 'pdf' || previewItem.file_type === 'docx' || previewItem.file_type === 'doc'" class="preview-toolbar">
+          <el-button size="small" @click="downloadFile">下载</el-button>
         </div>
       </div>
     </el-dialog>
@@ -400,19 +406,39 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+console.log('=== KnowledgeManageNew 初始化 ===')
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Document, Search, Connection, Grid, List, View, Edit, Delete,
-  Upload, Clock, Folder
+  Upload, Clock, Folder, UploadFilled
 } from '@element-plus/icons-vue'
 import { knowledgeApi } from '@/api/index.js'
 import { useRouter } from 'vue-router'
+import { QuillEditor } from '@vueup/vue-quill'
+import '@vueup/vue-quill/dist/vue-quill.snow.css'
+import mammoth from 'mammoth'
+import * as pdfjsLib from 'pdfjs-dist'
+
+// 延迟设置 worker，等库完全加载
+let pdfWorkerSrc = null
+const setupPdfWorker = () => {
+  if (!pdfWorkerSrc) {
+    pdfWorkerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href
+    console.log('Worker URL:', pdfWorkerSrc)
+    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc
+  }
+}
 
 const router = useRouter()
 
 // 视图模式
 const viewMode = ref('grid')
+
+// 加载状态
+const loading = ref(false)
+const uploading = ref(false)
+const submitting = ref(false)
 
 // 知识列表
 const knowledgeList = ref([])
@@ -447,6 +473,11 @@ const showUploadDialog = ref(false)
 const showTextDialog = ref(false)
 const showPreview = ref(false)
 
+// 表单 ref
+const uploadFormRef = ref(null)
+const uploadRef = ref(null)
+const textFormRef = ref(null)
+
 // 上传表单
 const uploadForm = reactive({
   file: null,
@@ -466,7 +497,7 @@ const textForm = reactive({
 })
 
 // 预览项
-const previewItem = ref({ title: '', file_type: 'pdf' })
+const previewItem = ref({ id: '', title: '', file_type: 'pdf', url: '', content: '', wordContent: '', loading: false })
 
 // 状态筛选
 const allStatusCleared = computed(() => !filters.fullTextStatus && !filters.vectorStatus && !filters.graphStatus)
@@ -502,13 +533,18 @@ const handleFilter = () => {
 
 // 加载数据
 const loadData = async () => {
+  loading.value = true
   try {
     const params = {
       page: pagination.page,
       page_size: pagination.pageSize
     }
-    if (filters.category) params.category = filters.category
     if (filters.keyword) params.keyword = filters.keyword
+    if (filters.type) params.type = filters.type
+    if (filters.category) params.category = filters.category
+    if (filters.fullTextStatus) params.es_indexed = filters.fullTextStatus
+    if (filters.vectorStatus) params.vector_indexed = filters.vectorStatus
+    if (filters.graphStatus) params.graph_indexed = filters.graphStatus
 
     const res = await knowledgeApi.list(params)
     knowledgeList.value = (res.items || []).map(item => ({
@@ -521,6 +557,8 @@ const loadData = async () => {
     pagination.total = res.total || 0
   } catch (error) {
     console.error('加载知识列表失败:', error)
+  } finally {
+    loading.value = false
   }
 }
 
@@ -553,69 +591,264 @@ const handleFileRemove = () => {
 
 // 上传
 const handleUpload = async () => {
-  if (!uploadForm.file || !uploadForm.category) {
-    ElMessage.warning('请选择文件并填写分类')
+  if (!uploadForm.file) {
+    ElMessage.warning('请选择文件')
+    return
+  }
+  if (!uploadForm.category) {
+    ElMessage.warning('请选择分类')
     return
   }
 
-  const formData = new FormData()
-  formData.append('file', uploadForm.file)
-  formData.append('category', uploadForm.category)
-  if (uploadForm.title) formData.append('title', uploadForm.title)
-  if (uploadForm.source) formData.append('source', uploadForm.source)
-  if (uploadForm.tags) formData.append('tags', uploadForm.tags)
-
+  uploading.value = true
   try {
+    const formData = new FormData()
+    formData.append('file', uploadForm.file)
+    if (uploadForm.title) formData.append('title', uploadForm.title)
+    formData.append('category', uploadForm.category)
+    if (uploadForm.source) formData.append('source', uploadForm.source)
+    if (uploadForm.tags) formData.append('tags', uploadForm.tags)
+
     await knowledgeApi.upload(formData)
     ElMessage.success('上传成功')
     showUploadDialog.value = false
-    uploadForm.file = null
-    uploadForm.title = ''
-    uploadForm.category = ''
-    uploadForm.source = ''
-    uploadForm.tags = ''
+    resetUploadForm()
     loadData()
     loadStats()
   } catch (error) {
     ElMessage.error('上传失败')
+  } finally {
+    uploading.value = false
+  }
+}
+
+const resetUploadForm = () => {
+  uploadForm.file = null
+  uploadForm.title = ''
+  uploadForm.category = ''
+  uploadForm.source = ''
+  uploadForm.tags = ''
+  if (uploadRef.value) {
+    uploadRef.value.clearFiles()
   }
 }
 
 // 添加文本
 const handleTextSubmit = async () => {
-  if (!textForm.title || !textForm.content || !textForm.category) {
-    ElMessage.warning('请填写必填项')
+  if (!textForm.title) {
+    ElMessage.warning('请输入标题')
+    return
+  }
+  if (!textForm.content || textForm.content === '<p><br></p>' || textForm.content === '<p></p>') {
+    ElMessage.warning('请输入内容')
+    return
+  }
+  if (!textForm.category) {
+    ElMessage.warning('请选择分类')
     return
   }
 
+  submitting.value = true
   try {
     const data = {
       title: textForm.title,
       content: textForm.content,
-      category: textForm.category
+      category: textForm.category,
+      source: textForm.source || null,
+      tags: textForm.tags ? textForm.tags.split(',').map(t => t.trim()).filter(t => t) : []
     }
-    if (textForm.source) data.source = textForm.source
-    if (textForm.tags) data.tags = textForm.tags.split(',').map(t => t.trim()).filter(Boolean)
-
     await knowledgeApi.createManual(data)
     ElMessage.success('知识添加成功')
     showTextDialog.value = false
-    textForm.title = ''
-    textForm.content = ''
-    textForm.category = ''
-    textForm.source = ''
-    textForm.tags = ''
     loadData()
     loadStats()
   } catch (error) {
     ElMessage.error('添加失败')
+  } finally {
+    submitting.value = false
+  }
+}
+
+const resetTextForm = () => {
+  textForm.title = ''
+  textForm.content = ''
+  textForm.category = ''
+  textForm.source = ''
+  textForm.tags = ''
+}
+
+// 监听文本弹窗关闭时重置表单
+watch(showTextDialog, (val) => {
+  if (!val) {
+    resetTextForm()
+  }
+})
+
+// 下载文件
+const downloadFile = async () => {
+  if (!previewItem.value.title) return
+  try {
+    ElMessage.info('正在准备下载...')
+    const response = await knowledgeApi.download(previewItem.value.id || previewItem.value.title)
+    const blob = new Blob([response])
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${previewItem.value.title}.${previewItem.value.file_type}`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    window.URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error('下载失败:', error)
+    ElMessage.error('下载失败')
   }
 }
 
 // 查看
-const viewFile = (item) => {
-  previewItem.value = { title: item.title, file_type: item.file_type }
+const viewFile = async (item) => {
+  console.log('=== viewFile 开始 ===')
+  console.log('点击知识:', item.title, 'file_type:', item.file_type, 'file_path:', item.file_path)
+  const hasFile = item.file_type && item.file_path
+  console.log('hasFile:', hasFile)
+
+  if (hasFile) {
+    console.log('走文件预览路线, file_type:', item.file_type)
+    previewItem.value = { id: item.id, title: item.title, file_type: item.file_type, url: '', content: '', wordContent: '', loading: true }
+    showPreview.value = true
+
+    try {
+      console.log('调用 knowledgeApi.download, id:', item.id)
+      const response = await knowledgeApi.download(item.id)
+      console.log('download 返回, type:', typeof response, 'is Blob:', response instanceof Blob)
+      console.log('响应数据 keys:', Object.keys(response))
+      if (!response) {
+        throw new Error('响应为空')
+      }
+      console.log('下载完成，准备创建Blob')
+      // Axios response 对象: response.data 才是真正的数据
+      const rawData = response.data || response
+      const blob = new Blob([rawData], { type: 'application/pdf' })
+      console.log('Blob创建完成, 大小:', blob.size)
+
+      if (item.file_type === 'pdf') {
+        console.log('进入PDF预览')
+        await renderPdfPreview(blob)
+      } else if (item.file_type === 'docx') {
+        await renderWordPreview(blob)
+      } else {
+        showPreview.value = false
+        ElMessage.warning('此文件格式不支持预览，将开始下载')
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `${item.title}.${item.file_type}`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+      }
+      return
+    } catch (error) {
+      console.error('获取文件失败:', error)
+      ElMessage.error('获取文件失败')
+      showPreview.value = false
+      return
+    }
+  }
+
+  // 无文件的知识（如文本类型），直接从API获取内容
+  previewItem.value = { id: item.id, title: item.title, file_type: item.file_type, url: '', content: '', wordContent: '', loading: true }
   showPreview.value = true
+
+  try {
+    const detail = await knowledgeApi.get(item.id)
+    previewItem.value.content = detail.content || ''
+  } catch (e) {
+    console.error('获取内容失败:', e)
+  }
+  previewItem.value.loading = false
+}
+
+// 渲染 PDF 预览
+const renderPdfPreview = async (blob) => {
+  console.log('=== renderPdfPreview 开始 ===')
+  console.log('blob type:', blob.type, 'size:', blob.size)
+  setupPdfWorker() // 确保 worker 已设置
+
+  // 等待容器出现
+  let container = document.getElementById('pdf-preview-container')
+  let waitCount = 0
+  while (!container && waitCount < 100) {
+    await new Promise(r => setTimeout(r, 100))
+    container = document.getElementById('pdf-preview-container')
+    waitCount++
+  }
+  if (!container) {
+    console.log('容器不存在!')
+    return
+  }
+  console.log('找到容器!')
+
+  try {
+    console.log('创建ArrayBuffer...')
+    const arrayBuffer = await blob.arrayBuffer()
+    console.log('ArrayBuffer创建完成，长度:', arrayBuffer.byteLength)
+
+    console.log('创建PDF文档...')
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer })
+    console.log('LoadingTask created')
+
+    console.log('等待PDF文档加载...')
+    const pdf = await loadingTask.promise
+    console.log('PDF加载成功, 页数:', pdf.numPages)
+
+    container.innerHTML = ''
+    container.style.overflow = 'auto'
+    container.style.maxHeight = '70vh'
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      console.log('渲染第', i, '页')
+      const page = await pdf.getPage(i)
+      const scale = 1.5
+      const viewport = page.getViewport({ scale })
+
+      const canvas = document.createElement('canvas')
+      canvas.style.display = 'block'
+      canvas.style.margin = '0 auto 10px'
+      canvas.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'
+      const context = canvas.getContext('2d')
+      canvas.height = viewport.height
+      canvas.width = viewport.width
+
+      await page.render({ canvasContext: context, viewport }).promise
+      container.appendChild(canvas)
+      console.log('第', i, '页渲染完成')
+    }
+    previewItem.value.loading = false
+    console.log('=== PDF渲染完成 ===')
+  } catch (error) {
+    console.error('PDF 渲染失败:', error)
+    previewItem.value.loading = false
+  }
+}
+
+// 渲染 Word 预览
+const renderWordPreview = async (blob) => {
+  console.log('=== renderWordPreview 开始 ===')
+  try {
+    const arrayBuffer = await blob.arrayBuffer()
+    console.log('ArrayBuffer ready, converting with mammoth...')
+    const result = await mammoth.convertToHtml({ arrayBuffer })
+    console.log('Mammoth conversion done, html length:', result.value?.length)
+    previewItem.value.wordContent = result.value
+    previewItem.value.loading = false
+    console.log('=== Word渲染完成 ===')
+  } catch (error) {
+    console.error('Word 渲染失败:', error)
+    ElMessage.error('Word加载失败: ' + error.message)
+    previewItem.value.loading = false
+  }
 }
 
 // 编辑
@@ -645,11 +878,43 @@ const deleteItem = async (item) => {
 // 重建
 const retryProcess = async (item, type) => {
   const names = { es: '全文检索', vector: '语义搜索', graph: '知识图谱' }
+  console.log('retryProcess called, item:', item.id, 'type:', type)
   try {
-    await knowledgeApi.rebuild(item.id, type)
-    ElMessage.success(`已提交${names[type]}重建任务`)
-    loadData()
+    const res = await knowledgeApi.rebuild(item.id, type)
+    console.log('rebuild 返回:', res)
+
+    if (type === 'graph') {
+      // 图谱处理需要时间，显示进度提示并等待
+      ElMessage.info('正在处理知识图谱，请稍候...')
+      // 每2秒轮询一次，最多6次（12秒）
+      let retries = 6
+      const checkStatus = async () => {
+        if (retries <= 0) {
+          ElMessage.warning('图谱处理超时，请稍后刷新页面查看结果')
+          loadData()
+          return
+        }
+        retries--
+        await new Promise(r => setTimeout(r, 2000))
+        // 重新获取数据检查状态
+        const checkRes = await knowledgeApi.get(item.id)
+        if (checkRes && checkRes.graph_indexed === 'done') {
+          ElMessage.success('知识图谱重建完成')
+          loadData()
+        } else if (checkRes && checkRes.graph_indexed === 'failed') {
+          ElMessage.error('知识图谱重建失败')
+          loadData()
+        } else {
+          checkStatus()
+        }
+      }
+      checkStatus()
+    } else {
+      ElMessage.success(`已提交${names[type]}重建任务`)
+      loadData()
+    }
   } catch (error) {
+    console.error('重建失败:', error)
     ElMessage.error('操作失败')
   }
 }
@@ -690,6 +955,7 @@ const handleStatsClick = (type) => {
 }
 
 onMounted(() => {
+  console.log('=== onMounted 调用 ===')
   loadData()
   loadStats()
 })
@@ -1204,5 +1470,95 @@ onMounted(() => {
 .preview-hint {
   font-size: 14px;
   opacity: 0.7;
+}
+
+.file-preview-iframe {
+  width: 100%;
+  height: 600px;
+  border: none;
+}
+
+.text-preview {
+  padding: 20px;
+  line-height: 1.8;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.text-preview :deep(p) {
+  margin-bottom: 12px;
+}
+
+.preview-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 60px 20px;
+  color: var(--el-text-color-secondary);
+}
+
+.preview-loading .el-icon {
+  font-size: 48px;
+}
+
+.pdf-preview-container {
+  padding: 10px;
+  background: #f5f5f5;
+  text-align: center;
+}
+
+.pdf-preview-container canvas {
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  margin-bottom: 10px;
+}
+
+.word-preview {
+  background: white;
+}
+
+.word-preview :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 16px 0;
+}
+
+.word-preview :deep(td) {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+/* 富文本编辑器样式 */
+.editor-wrapper {
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.editor-wrapper :deep(.ql-toolbar) {
+  border: none;
+  border-bottom: 1px solid #dcdfe6;
+  background: #f5f7fa;
+}
+
+.editor-wrapper :deep(.ql-container) {
+  border: none;
+  font-size: 14px;
+}
+
+.editor-wrapper :deep(.ql-editor) {
+  min-height: 200px;
+  max-height: 300px;
+  overflow-y: auto;
+  writing-mode: horizontal-tb !important;
+}
+
+.editor-wrapper :deep(.ql-editor.ql-blank::before) {
+  writing-mode: horizontal-tb !important;
+  color: #c0c4cc;
+  font-style: normal;
+  left: 12px;
 }
 </style>

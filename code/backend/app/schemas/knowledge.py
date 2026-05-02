@@ -27,6 +27,7 @@ class KnowledgeItem(BaseModel):
     vector_indexed: Optional[str] = "pending"
     graph_indexed: Optional[str] = "pending"
     file_type: Optional[str] = None
+    file_path: Optional[str] = None
 
     class Config:
         from_attributes = True

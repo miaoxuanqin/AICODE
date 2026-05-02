@@ -50,12 +50,39 @@ def _sync_knowledge_to_neo4j(knowledge_id: str, content: str):
         return
 
     try:
+        # 创建独立的数据库会话（异步线程需要自己的会话）
+        from app.database import SessionLocal
+        db = SessionLocal()
+
         extractor = get_graph_extractor()
         stats = extractor.sync_to_neo4j(knowledge_id, content)
+
+        # 更新数据库中的图谱状态
+        knowledge = db.query(Knowledge).filter(Knowledge.id == knowledge_id).first()
+        if knowledge:
+            if stats['entities_created'] > 0 or stats['relations_created'] > 0:
+                knowledge.graph_indexed = "done"
+            else:
+                knowledge.graph_indexed = "failed"
+            db.commit()
+
         print(f"Neo4j 同步完成: knowledge_id={knowledge_id}, "
               f"entities={stats['entities_created']}, relations={stats['relations_created']}")
     except Exception as e:
         print(f"Neo4j 同步失败: {e}")
+        # 更新状态为失败
+        try:
+            from app.database import SessionLocal
+            db = SessionLocal()
+            knowledge = db.query(Knowledge).filter(Knowledge.id == knowledge_id).first()
+            if knowledge:
+                knowledge.graph_indexed = "failed"
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        if 'db' in dir():
+            db.close()
 
 
 CATEGORY_NAMES = {
@@ -236,7 +263,7 @@ async def create_knowledge_manual(
         id=knowledge_id,
         title=knowledge_data.title,
         summary=summary,
-        content=knowledge_data.content,  # 存MySQL（手动创建直接存content）
+        content=None,  # 不存MySQL，只存ES
         category=knowledge_data.category,
         source=knowledge_data.source,
         tags=tag_list,
@@ -299,6 +326,10 @@ def list_knowledge(
     page_size: int = Query(20, ge=1, le=100),
     category: Optional[str] = Query(None, pattern="^(law|tech|case|policy)$"),
     keyword: Optional[str] = Query(None),
+    type: Optional[str] = Query(None, description="文件类型: pdf, doc, text"),
+    es_indexed: Optional[str] = Query(None, description="全文检索状态: indexed, pending, failed"),
+    vector_indexed: Optional[str] = Query(None, description="语义搜索状态: done, pending, failed"),
+    graph_indexed: Optional[str] = Query(None, description="知识图谱状态: done, pending, failed, none"),
     sort: Optional[str] = Query("created_at desc"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -316,6 +347,18 @@ def list_knowledge(
 
     if keyword:
         query = query.filter(Knowledge.title.contains(keyword))
+
+    if type:
+        query = query.filter(Knowledge.file_type == type)
+
+    if es_indexed:
+        query = query.filter(Knowledge.es_indexed == es_indexed)
+
+    if vector_indexed:
+        query = query.filter(Knowledge.vector_indexed == vector_indexed)
+
+    if graph_indexed:
+        query = query.filter(Knowledge.graph_indexed == graph_indexed)
 
     # 排序
     if sort == "view_count desc":
@@ -342,7 +385,8 @@ def list_knowledge(
                 es_indexed=k.es_indexed or "pending",
                 vector_indexed=k.vector_indexed or "pending",
                 graph_indexed=k.graph_indexed or "pending",
-                file_type=k.file_type
+                file_type=k.file_type,
+                file_path=k.file_path
             )
             for k in items
         ],
@@ -576,6 +620,88 @@ def get_knowledge_stats(
         vectorDone=vectorDone,
         graphDone=graphDone
     )
+
+
+@router.get("/{knowledge_id}/file-url")
+def get_knowledge_file_url(
+    knowledge_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取知识文件下载链接"""
+    is_admin = current_user.is_superuser == 1
+
+    if is_admin:
+        knowledge = db.query(Knowledge).filter(Knowledge.id == knowledge_id).first()
+    else:
+        knowledge = db.query(Knowledge).filter(
+            Knowledge.id == knowledge_id,
+            Knowledge.user_id == str(current_user.id)
+        ).first()
+
+    if not knowledge:
+        raise HTTPException(status_code=404, detail="知识不存在")
+
+    if not knowledge.file_path:
+        raise HTTPException(status_code=404, detail="该知识没有关联文件")
+
+    try:
+        url = minio_service.get_file_url(knowledge.file_path)
+        return {"url": url, "file_type": knowledge.file_type}
+    except Exception as e:
+        print(f"获取文件URL失败: {e}")
+        raise HTTPException(status_code=500, detail=f"获取文件URL失败: {str(e)}")
+
+
+@router.get("/{knowledge_id}/download")
+def download_knowledge_file(
+    knowledge_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """下载知识文件（后端代理下载）"""
+    is_admin = current_user.is_superuser == 1
+
+    if is_admin:
+        knowledge = db.query(Knowledge).filter(Knowledge.id == knowledge_id).first()
+    else:
+        knowledge = db.query(Knowledge).filter(
+            Knowledge.id == knowledge_id,
+            Knowledge.user_id == str(current_user.id)
+        ).first()
+
+    if not knowledge:
+        raise HTTPException(status_code=404, detail="知识不存在")
+
+    if not knowledge.file_path:
+        raise HTTPException(status_code=404, detail="该知识没有关联文件")
+
+    try:
+        file_data = minio_service.download_file(knowledge.file_path)
+
+        # 根据文件类型确定 content-type
+        content_types = {
+            'pdf': 'application/pdf',
+            'doc': 'application/msword',
+            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        }
+        content_type = content_types.get(knowledge.file_type, 'application/octet-stream')
+
+        from fastapi.responses import Response
+        import urllib.parse
+
+        # URL编码文件名，避免中文编码问题
+        filename = urllib.parse.quote(f"{knowledge.title}.{knowledge.file_type}")
+        return Response(
+            content=file_data,
+            media_type=content_type,
+            headers={
+                'Content-Disposition': f'attachment; filename="{filename}"; filename*=UTF-8\'\'{filename}'
+            }
+        )
+    except Exception as e:
+        print(f"下载文件失败: {e}")
+        raise HTTPException(status_code=500, detail=f"下载文件失败: {str(e)}")
 
 
 @router.get("/{knowledge_id}", response_model=KnowledgeDetail)
@@ -862,25 +988,91 @@ def rebuild_knowledge_index(
     db: Session = Depends(get_db)
 ):
     """重建指定知识的索引"""
-    knowledge = db.query(Knowledge).filter(
-        Knowledge.id == knowledge_id,
-        Knowledge.user_id == str(current_user.id)
-    ).first()
+    is_admin = current_user.is_superuser == 1
+
+    if is_admin:
+        knowledge = db.query(Knowledge).filter(Knowledge.id == knowledge_id).first()
+    else:
+        knowledge = db.query(Knowledge).filter(
+            Knowledge.id == knowledge_id,
+            Knowledge.user_id == str(current_user.id)
+        ).first()
 
     if not knowledge:
         raise HTTPException(status_code=404, detail="知识不存在")
 
-    # 更新状态为pending
+    # 更新状态为pending并触发重建
     if index_type == "es":
         knowledge.es_indexed = "pending"
+        try:
+            search_service.delete_knowledge_index(knowledge_id)
+            if knowledge.content:
+                search_service.index_knowledge(
+                    knowledge_id=knowledge_id,
+                    title=knowledge.title,
+                    content=knowledge.content,
+                    summary=knowledge.summary or "",
+                    category=knowledge.category,
+                    source=knowledge.source or "",
+                    tags=knowledge.tags or [],
+                    user_id=str(knowledge.user_id),
+                    created_at=str(knowledge.created_at),
+                    view_count=knowledge.view_count
+                )
+                knowledge.es_indexed = "indexed"
+        except Exception as e:
+            print(f"ES索引重建失败: {e}")
+            knowledge.es_indexed = "failed"
     elif index_type == "vector":
         knowledge.vector_indexed = "pending"
+        try:
+            search_service.delete_knowledge_index(knowledge_id)
+            if knowledge.content:
+                search_service.index_vector(
+                    knowledge_id=knowledge_id,
+                    title=knowledge.title,
+                    content=knowledge.content,
+                    category=knowledge.category,
+                    user_id=str(knowledge.user_id)
+                )
+                knowledge.vector_indexed = "done"
+        except Exception as e:
+            print(f"向量索引重建失败: {e}")
+            knowledge.vector_indexed = "failed"
     elif index_type == "graph":
         knowledge.graph_indexed = "pending"
+        db.commit()
+        # 异步重建图谱
+        # 先尝试从ES获取content（MySQL不存完整content）
+        content = None
+        try:
+            es_doc = search_service.get_by_id(knowledge_id)
+            if es_doc:
+                content = es_doc.get("content")
+        except Exception:
+            pass
+
+        if GRAPH_EXTRACTOR_AVAILABLE and content:
+            try:
+                extractor = get_graph_extractor()
+                extractor.delete_from_neo4j(knowledge_id)
+                # 直接线程调用，不依赖 asyncio 事件循环
+                import threading
+                thread = threading.Thread(
+                    target=_sync_knowledge_to_neo4j,
+                    args=(knowledge_id, content),
+                    daemon=True
+                )
+                thread.start()
+            except Exception as e:
+                print(f"图谱重建失败: {e}")
+                knowledge.graph_indexed = "failed"
+        else:
+            knowledge.graph_indexed = "failed"
 
     db.commit()
 
-    return {"message": "已提交重建任务"}
+    return {"message": "已提交重建任务", "status": getattr(knowledge, f"{index_type}_indexed")}
 
 
 @router.delete("/{knowledge_id}/clear/{index_type}")
@@ -891,10 +1083,15 @@ def clear_knowledge_index(
     db: Session = Depends(get_db)
 ):
     """清空指定知识的索引"""
-    knowledge = db.query(Knowledge).filter(
-        Knowledge.id == knowledge_id,
-        Knowledge.user_id == str(current_user.id)
-    ).first()
+    is_admin = current_user.is_superuser == 1
+
+    if is_admin:
+        knowledge = db.query(Knowledge).filter(Knowledge.id == knowledge_id).first()
+    else:
+        knowledge = db.query(Knowledge).filter(
+            Knowledge.id == knowledge_id,
+            Knowledge.user_id == str(current_user.id)
+        ).first()
 
     if not knowledge:
         raise HTTPException(status_code=404, detail="知识不存在")
@@ -908,7 +1105,10 @@ def clear_knowledge_index(
             pass
     elif index_type == "vector":
         knowledge.vector_indexed = "none"
-        # TODO: 调用Qdrant删除向量
+        try:
+            search_service.delete_knowledge_index(knowledge_id)
+        except Exception:
+            pass
     elif index_type == "graph":
         knowledge.graph_indexed = "none"
         try:

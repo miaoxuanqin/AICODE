@@ -110,7 +110,15 @@ export const knowledgeApi = {
   // 重建索引
   rebuild: (id, type) => request.post(`/knowledge/${id}/rebuild/${type}`),
   // 清空索引
-  clear: (id, type) => request.delete(`/knowledge/${id}/clear/${type}`)
+  clear: (id, type) => request.delete(`/knowledge/${id}/clear/${type}`),
+  // 获取文件访问URL（用于预览）
+  getFileUrl: (id) => request.get(`/knowledge/${id}/file-url`),
+  // 下载文件（通过后端代理）
+  download: (id, filename) => {
+    return request.get(`/knowledge/${id}/download`, {
+      responseType: 'blob'
+    })
+  }
 }
 
 // ============ 问答助手 API ============
