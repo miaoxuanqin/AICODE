@@ -60,15 +60,14 @@ class MinioService:
             raise Exception(f"文件上传失败: {str(e)}")
 
     def get_file_url(self, object_name: str, expires_hours: int = 24) -> str:
-        """获取文件访问 URL"""
+        """获取文件访问 URL（使用无签名方式）"""
+        # MinIO presigned URL 有签名问题，改用桶的公开访问
+        # 确保 bucket 是公开的，或者通过后端代理下载
         try:
-            url = self.client.presigned_get_object(
-                bucket_name=self.bucket,
-                object_name=object_name,
-                expires=expires_hours * 3600
-            )
+            # 直接构建 URL（不通过 presigned，因为 MinIO 签名计算有问题）
+            url = f"http://{self.client._base_url.host}/{self.bucket}/{object_name}"
             return url
-        except S3Error as e:
+        except Exception as e:
             raise Exception(f"获取文件 URL 失败: {str(e)}")
 
     def delete_file(self, object_name: str):
