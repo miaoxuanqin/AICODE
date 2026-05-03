@@ -12,7 +12,9 @@ class Knowledge(Base):
     title = Column(String(500), nullable=False, index=True)
     content = Column(Text, nullable=True)  # 内容存ES，MySQL只存摘要
     summary = Column(Text, nullable=True)
-    category = Column(String(50), nullable=False, index=True)  # law/tech/case/policy
+    # 兼容旧数据：category 存储分类标识字符串（如 law/tech/case/policy）
+    # 注意：category_id 外键暂未添加到数据库，只用 category 字符串字段
+    category = Column(String(50), nullable=False, index=True)
     source = Column(String(500), nullable=True)
     tags = Column(JSON, nullable=True, default=list)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)

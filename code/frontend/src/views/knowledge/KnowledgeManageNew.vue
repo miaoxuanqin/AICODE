@@ -1,7 +1,36 @@
 <template>
   <div class="knowledge-manage-new">
-    <!-- 页面标题栏 -->
-    <div class="page-header">
+    <!-- 左侧分类树 -->
+    <div class="category-sidebar">
+      <div class="sidebar-header">
+        <span>知识分类</span>
+        <el-button size="small" link type="primary" @click="showCategoryDialog('create')">+ 新增</el-button>
+      </div>
+      <el-tree
+        ref="categoryTreeRef"
+        :data="categoryTree"
+        :props="{ children: 'children', label: 'name' }"
+        node-key="id"
+        default-expand-all
+        highlight-current
+        @node-click="handleCategoryNodeClick"
+      >
+        <template #default="{ node, data }">
+          <span class="tree-node">
+            <span class="node-label">{{ node.label }}</span>
+            <span class="node-actions">
+              <el-button size="small" link type="primary" @click.stop="showCategoryDialog('edit', data)">编辑</el-button>
+              <el-button size="small" link type="danger" @click.stop="handleDeleteCategory(data)">删除</el-button>
+            </span>
+          </span>
+        </template>
+      </el-tree>
+    </div>
+
+    <!-- 右侧主内容 -->
+    <div class="main-content">
+      <!-- 页面标题栏 -->
+      <div class="page-header">
       <div class="header-left">
         <h1 class="page-title">知识管理</h1>
         <p class="page-subtitle">管理所有知识内容，包括文档和文本</p>
@@ -93,13 +122,6 @@
         <el-option label="PDF文档" value="pdf" />
         <el-option label="Word文档" value="docx" />
         <el-option label="文本" value="text" />
-      </el-select>
-      <el-select v-model="filters.category" placeholder="全部分类" clearable @change="handleFilter" style="width: 140px;">
-        <el-option label="全部分类" value="" />
-        <el-option label="法律法规" value="law" />
-        <el-option label="技术标准" value="tech" />
-        <el-option label="执法案例" value="case" />
-        <el-option label="政策文件" value="policy" />
       </el-select>
       <div class="status-filters">
         <el-tag
@@ -295,6 +317,27 @@
       />
     </div>
 
+    <!-- 分类管理弹窗 -->
+    <el-dialog v-model="showCategoryDialogVisible" :title="categoryDialogTitle" width="400px">
+      <el-form ref="categoryFormRef" :model="categoryForm" label-width="80px">
+        <el-form-item label="分类名称" required>
+          <el-input v-model="categoryForm.name" placeholder="请输入分类名称" />
+        </el-form-item>
+        <el-form-item label="上级分类">
+          <el-select v-model="categoryForm.parent_id" placeholder="无上级分类（顶级）" clearable>
+            <el-option v-for="cat in flatCategoryList" :key="cat.id" :label="cat.name" :value="cat.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="排序">
+          <el-input-number v-model="categoryForm.sort_order" :min="0" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showCategoryDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handleSaveCategory">确定</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 上传弹窗 -->
     <el-dialog v-model="showUploadDialog" title="上传知识" width="500px">
       <el-form ref="uploadFormRef" :model="uploadForm" label-width="80px">
@@ -472,6 +515,34 @@ const pagination = reactive({
 const showUploadDialog = ref(false)
 const showTextDialog = ref(false)
 const showPreview = ref(false)
+const showCategoryDialogVisible = ref(false)
+
+// 分类树相关
+const categoryTree = ref([])
+const categoryTreeRef = ref(null)
+const categoryDialogTitle = ref('新增分类')
+const categoryFormRef = ref(null)
+const categoryForm = reactive({
+  id: null,
+  name: '',
+  parent_id: null,
+  sort_order: 0
+})
+const categoryAction = ref('create') // 'create' or 'edit'
+
+// 扁平分类列表（用于上级分类选择）
+const flatCategoryList = computed(() => {
+  const flatten = (cats, result = []) => {
+    cats.forEach(cat => {
+      result.push(cat)
+      if (cat.children && cat.children.length > 0) {
+        flatten(cat.children, result)
+      }
+    })
+    return result
+  }
+  return flatten(categoryTree.value)
+})
 
 // 表单 ref
 const uploadFormRef = ref(null)
@@ -956,14 +1027,147 @@ const handleStatsClick = (type) => {
 
 onMounted(() => {
   console.log('=== onMounted 调用 ===')
+  loadCategoryTree()
   loadData()
   loadStats()
 })
+
+// 加载分类树
+const loadCategoryTree = async () => {
+  try {
+    const res = await categoryApi.list()
+    categoryTree.value = res || []
+  } catch (error) {
+    console.error('加载分类树失败:', error)
+  }
+}
+
+// 分类树节点点击
+const handleCategoryNodeClick = (data) => {
+  filters.category = String(data.id)
+  handleFilter()
+}
+
+// 显示分类弹窗
+const showCategoryDialog = (action, data) => {
+  categoryAction.value = action
+  if (action === 'edit' && data) {
+    categoryDialogTitle.value = '编辑分类'
+    categoryForm.id = data.id
+    categoryForm.name = data.name
+    categoryForm.parent_id = data.parent_id
+    categoryForm.sort_order = data.sort_order || 0
+  } else {
+    categoryDialogTitle.value = '新增分类'
+    categoryForm.id = null
+    categoryForm.name = ''
+    categoryForm.parent_id = null
+    categoryForm.sort_order = 0
+  }
+  showCategoryDialogVisible.value = true
+}
+
+// 保存分类
+const handleSaveCategory = async () => {
+  if (!categoryForm.name) {
+    ElMessage.warning('请输入分类名称')
+    return
+  }
+  try {
+    if (categoryAction.value === 'edit') {
+      await categoryApi.update(categoryForm.id, {
+        name: categoryForm.name,
+        parent_id: categoryForm.parent_id,
+        sort_order: categoryForm.sort_order
+      })
+      ElMessage.success('分类已更新')
+    } else {
+      await categoryApi.create({
+        name: categoryForm.name,
+        parent_id: categoryForm.parent_id,
+        sort_order: categoryForm.sort_order
+      })
+      ElMessage.success('分类已创建')
+    }
+    showCategoryDialogVisible.value = false
+    loadCategoryTree()
+  } catch (error) {
+    console.error('保存分类失败:', error)
+    ElMessage.error(error.detail || '保存失败')
+  }
+}
+
+// 删除分类
+const handleDeleteCategory = async (data) => {
+  try {
+    await ElMessageBox.confirm(`确定要删除分类"${data.name}"吗？`, '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await categoryApi.delete(data.id)
+    ElMessage.success('分类已删除')
+    loadCategoryTree()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('删除分类失败:', error)
+      ElMessage.error(error.detail || '删除失败')
+    }
+  }
+}
 </script>
 
 <style scoped>
 .knowledge-manage-new {
   padding: 24px;
+  display: flex;
+  gap: 24px;
+}
+
+.category-sidebar {
+  width: 220px;
+  min-width: 220px;
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  height: fit-content;
+  max-height: calc(100vh - 150px);
+  overflow-y: auto;
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.tree-node {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding-right: 8px;
+}
+
+.node-label {
+  flex: 1;
+}
+
+.node-actions {
+  display: none;
+}
+
+.tree-node:hover .node-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.main-content {
+  flex: 1;
+  min-width: 0;
 }
 
 .page-header {

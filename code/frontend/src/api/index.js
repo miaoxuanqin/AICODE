@@ -121,6 +121,18 @@ export const knowledgeApi = {
   }
 }
 
+// ============ 分类管理 API ============
+export const categoryApi = {
+  // 获取分类树
+  list: () => request.get('/categories'),
+  // 创建分类
+  create: (data) => request.post('/categories', data),
+  // 更新分类
+  update: (id, data) => request.put(`/categories/${id}`, data),
+  // 删除分类
+  delete: (id) => request.delete(`/categories/${id}`),
+}
+
 // ============ 问答助手 API ============
 export const qaApi = {
   // ============ 会话管理 ============

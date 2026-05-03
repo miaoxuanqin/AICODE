@@ -3,12 +3,12 @@ name: 知识管理模块开发状态
 description: 知识管理模块的开发进度、已完成文件、待完成事项
 type: project
 originSessionId: c9493d03-2404-41fa-8b7b-c4643b1160bc
-lastUpdated: 2026-05-02
+lastUpdated: 2026-05-03
 ---
 
 # 知识管理模块开发状态
 
-> 最后更新：2026-05-02
+> 最后更新：2026-05-03
 
 ## 开发进度
 
@@ -24,6 +24,7 @@ lastUpdated: 2026-05-02
 | 图谱浏览功能 | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
 | 知识管理新界面 | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
 | 知识管理-预览功能 | ✅ | ✅ | ✅ | ✅ | ✅ | 100% |
+| 知识管理-分类树功能 | ✅ | ✅ | ✅ | ✅ | ⚙️ | 90% |
 | 门户控制台原型 | ✅ | ✅ | — | — | — | 80% |
 
 ---
@@ -94,7 +95,57 @@ content = es_doc.get("content") if es_doc else None
 
 ---
 
-## 三、知识类型与存储
+## 三、2026-05-03 Session 更新
+
+### 3.1 分类树功能开发
+
+根据初设要求，新增多层级分类树功能。
+
+**新增文件**：
+- `app/models/category.py` - Category 模型（支持 parent_id 自关联）
+- `app/api/v1/category.py` - 分类 CRUD API（树形列表接口）
+- `app/schemas/category.py` - Pydantic Schema
+
+**数据库变更**：
+```sql
+ALTER TABLE categories ADD COLUMN sort_order INT DEFAULT 0;
+ALTER TABLE categories ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+```
+
+**前端改动**：
+- 左侧新增 220px 分类树侧边栏
+- 支持点击分类节点筛选知识列表
+- 新增/编辑/删除分类弹窗
+
+### 3.2 图谱重建异步任务修复
+
+**问题**：rebuild 接口中 `asyncio.create_task()` 在同步函数中无法执行。
+
+**修复**：改用 `threading.Thread` 启动后台线程。
+
+### 3.3 搜索筛选参数修复
+
+**问题**：前端 loadData() 只传递 keyword 和 category，其他筛选参数未传递。
+
+**修复**：后端 list 接口新增 type、es_indexed、vector_indexed、graph_indexed 参数，前端补充传递。
+
+### 3.4 Word 文档类型值修正
+
+**问题**：前端 el-option value 为 `doc`，数据库实际存储 `docx`。
+
+**修复**：前端的 value 从 `doc` 改为 `docx`。
+
+### 3.5 Git 提交记录
+
+| Commit | 说明 |
+|--------|------|
+| a375d02 | fix: 知识管理搜索筛选修复与图谱重建异步任务优化 |
+| ae5ecea | feat: 文档预览依赖安装与MinIO文件URL获取优化 |
+| a026034 | chore: 更新MCP配置、记忆文件与项目文档 |
+
+---
+
+## 四、知识类型与存储
 
 | 类型 | file_type | 存储 |
 |------|-----------|------|
@@ -104,9 +155,9 @@ content = es_doc.get("content") if es_doc else None
 
 ---
 
-## 四、关键技术点
+## 五、关键技术点
 
-### 4.1 预览流程判断
+### 5.1 预览流程判断
 
 ```javascript
 const hasFile = item.file_type && item.file_path
@@ -117,13 +168,13 @@ if (hasFile) {
 }
 ```
 
-### 4.2 PDF 渲染要点
+### 5.2 PDF 渲染要点
 
 - Worker 路径：`pdfjs-dist/build/pdf.worker.min.mjs`
 - 动态构造：`new URL(path, import.meta.url).href`
 - 等待容器出现后再渲染
 
-### 4.3 rebuild 接口
+### 5.3 rebuild 接口
 
 从 ES 而非 MySQL 获取 content：
 ```python
@@ -133,18 +184,19 @@ content = es_doc.get("content") if es_doc else None
 
 ---
 
-## 五、待完成事项
+## 六、待完成事项
 
 - [ ] 完善文件类型知识的 content 索引逻辑
 - [ ] 优化 PDF/Word 预览的样式
 - [ ] 统一知识创建流程，确保 content 写入 ES
 - [ ] 添加预览失败的重试机制
+- [ ] 分类与知识关联迁移到 category_id 外键
 
 ---
 
-## 六、相关文档
+## 七、相关文档
 
 | 文档 | 路径 |
 |------|------|
-| 进度跟踪 | `08-项目进度/知识管理-知识管理新界面-预览功能与文件类型处理-进度-20260502.md` |
-| 详细设计 | `04-功能详细设计/知识管理-知识管理新界面-预览功能与文件类型处理-详细设计-20260502.md` |
+| 进度跟踪 | `08-项目进度/知识管理-知识管理新界面-分类树功能开发-进度--20260503.md` |
+| 开发参考 | `06-开发参考/知识管理-知识管理新界面-分类树功能开发-开发参考--20260503.md` |
