@@ -3,8 +3,9 @@ name: 住建知识库项目概述
 description: 海南省住建知识库项目，技术栈、架构、关键路径等核心信息
 type: project
 originSessionId: c9493d03-2404-41fa-8b7b-c4643b1160bc
-lastUpdated: 2026-04-30
+lastUpdated: 2026-05-02
 ---
+
 # 海南省住建知识库系统
 
 ## 项目定位
@@ -23,6 +24,7 @@ lastUpdated: 2026-04-30
 - 大模型：MiniMax-M2.7 / Anthropic
 
 ## 外部服务地址
+
 | 服务 | 地址 |
 |-----|------|
 | MySQL | 172.20.36.91:3306 |
@@ -30,9 +32,21 @@ lastUpdated: 2026-04-30
 | Elasticsearch | 172.20.36.91:9200 |
 | Qdrant | 172.20.36.91:6333 |
 | MinIO | 172.20.36.91:9000 |
+| MinIO Console | 172.20.36.91:9001 |
 | Neo4j | 172.20.36.91:7474 |
+| Neo4j Bolt | 172.20.36.91:7687 |
+| Embedding服务 | 172.20.36.91:8001 |
+
+## 端口配置
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| 后端 API | 8000 | FastAPI 应用（重要：避免与 8001 冲突） |
+| WSL Embedding | 8001 | text2vec-base-chinese 模型 |
+| 前端 | 3000 | Vite 开发服务器 |
 
 ## LLM 配置（已接入，embedding 暂未使用）
+
 | 配置项 | 值 |
 |-------|-----|
 | API_BASE | https://ark.cn-beijing.volces.com/api/coding |
@@ -40,6 +54,7 @@ lastUpdated: 2026-04-30
 | MODEL | minimax-m2.7 |
 
 ## Anthropic LLM 配置（QA 模块使用）
+
 | 配置项 | 值 |
 |-------|-----|
 | API_BASE | https://api.minimaxi.com/anthropic |
@@ -47,6 +62,7 @@ lastUpdated: 2026-04-30
 | MODEL | MiniMax-M2.7 |
 
 ## 项目结构
+
 ```
 code/
 ├── backend/          # FastAPI 后端
@@ -68,6 +84,7 @@ code/
 ```
 
 ## 知识模块核心功能
+
 1. 文件上传解析（Word/PDF → MinIO存储，ES存内容）
 2. 手动添加知识（富文本编辑器，支持加粗/斜体/列表等格式）
 3. 知识 CRUD（MySQL存元数据+摘要，ES存完整内容）
@@ -77,8 +94,9 @@ code/
 7. 收藏、评论功能
 8. 图谱增强问答（Graph-RAG，多跳推理，可视化推理路径）
 9. Neo4j 图谱浏览（节点交互、关系导航、路径探索）
+10. PDF/Word/文本预览（pdfjs-dist + mammoth）
 
-## 数据存储架构（2026-04-30 更新）
+## 数据存储架构
 
 | 存储介质 | 存储内容 | 说明 |
 |---------|---------|------|
@@ -90,19 +108,19 @@ code/
 
 ### 知识类型
 
-| 类型 | 值 | 存储 |
-|------|-----|------|
+| 类型 | file_type | 存储 |
+|------|-----------|------|
 | PDF文档 | `pdf` | MinIO + ES解析文本 |
-| Word文档 | `doc` | MinIO + ES解析文本 |
-| 文本 | `text` | ES原始文本 |
+| Word文档 | `doc/docx` | MinIO + ES解析文本 |
+| 文本 | `html` | ES原始文本（无file_path） |
 
 ### 索引状态
 
 | 状态字段 | 说明 | 值 |
 |---------|------|-----|
-| `fullTextStatus` | ES索引状态 | `indexed`/`pending` |
-| `vectorStatus` | 向量处理状态 | `done`/`pending` |
-| `graphStatus` | 图谱构建状态 | `done`/`pending` |
+| `es_indexed` | ES索引状态 | `indexed`/`pending`/`failed`/`none` |
+| `vector_indexed` | 向量处理状态 | `done`/`pending`/`failed`/`none` |
+| `graph_indexed` | 图谱构建状态 | `done`/`pending`/`failed`/`none` |
 
 ## 原型文件
 
@@ -111,15 +129,17 @@ code/
 | `code/frontend/src/views/knowledge/KnowledgeManageNew.html` | 知识管理新界面原型 |
 | `code/frontend/src/views/Portal.html` | 门户控制台原型 |
 
-## 图谱数据（截至 2026-04-29）
+## 图谱数据（截至 2026-05-02）
+
 | 存储 | 数量 | 状态 |
 |------|------|------|
-| MySQL | 42 条 | 正常运行 |
-| Elasticsearch | 42 条 | 已同步 |
-| Qdrant | 42 个向量 | 已同步 |
+| MySQL | ~42 条 | 正常运行 |
+| Elasticsearch | ~42 条 | 已同步 |
+| Qdrant | ~42 个向量 | 已同步 |
 | Neo4j | 825 节点 / 1352 边 | 已同步 |
 
 ## 关键文件
+
 | 文件 | 说明 |
 |------|------|
 | `code/backend/app/services/graph_service.py` | 图谱服务，包含 reason 和 reason_with_neo4j |
@@ -127,3 +147,26 @@ code/
 | `code/backend/app/services/graph_extractor.py` | 实体关系抽取 |
 | `code/frontend/src/views/graph/GraphExplorer.vue` | 图谱浏览页面 |
 | `code/frontend/src/views/graph/GraphQAChat.vue` | 图谱增强问答页面 |
+| `code/frontend/src/views/knowledge/KnowledgeManageNew.vue` | 知识管理新界面（含预览功能） |
+
+## 2026-05-02 更新
+
+### PDF/Word 预览功能
+
+**技术实现**：
+- PDF: pdfjs-dist 5.7.284，worker 动态加载，逐页渲染到 canvas
+- Word: mammoth 1.12.0，转换为 HTML 渲染
+- 文本: 直接从 API 获取 content 显示
+
+**问题修复**：
+1. pdfjs-dist worker 加载问题 → 使用 `new URL().href` 动态构造
+2. 容器找不到 → 添加等待循环
+3. Axios 响应结构 → 使用 `response.data || response`
+4. 文本类型无预览 → 直接从 API 获取
+5. 图谱重建失败 → 从 ES 获取 content 而非 MySQL
+
+**预览流程**：
+```
+有 file_path → 下载文件 → PDF用pdfjs-dist / Word用mammoth
+无 file_path → 调用 API 获取 content → 直接显示
+```
