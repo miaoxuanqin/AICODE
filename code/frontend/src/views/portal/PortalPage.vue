@@ -1,5 +1,5 @@
 <template>
-  <div class="portal-page">
+  <div class="portal-page" v-loading="loading">
     <!-- 顶部区域 -->
     <div class="page-header">
       <div class="header-content">
@@ -282,14 +282,32 @@ import {
   Upload, Edit, Search, Share, ChatDotRound, List,
   Document, User, Connection, Grid, Clock
 } from '@element-plus/icons-vue'
+import { knowledgeApi } from '@/api'
+import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 
 // 状态
 const refreshing = ref(false)
+const loading = ref(true)
 const trendPeriod = ref('month')
 const categoryType = ref('pie')
 const tagsType = ref('bar')
+
+// 门户数据
+const portalData = ref({
+  total: 0,
+  monthly_new: 0,
+  es_indexed: 0,
+  vector_indexed: 0,
+  graph_nodes: 0,
+  user_count: 0,
+  categories: [],
+  tags: [],
+  sources: [],
+  trend: [],
+  index_status: []
+})
 
 // 日期范围
 const dateRange = ref([])
@@ -321,9 +339,9 @@ const statsCards = reactive([
     icon: markRaw(Document),
     iconBg: 'linear-gradient(135deg, #667eea20, #764ba220)',
     iconColor: '#667eea',
-    value: 12856,
+    value: 0,
     label: '知识总数',
-    trend: 12.5,
+    trend: 0,
     progress: undefined
   },
   {
@@ -331,9 +349,9 @@ const statsCards = reactive([
     icon: markRaw(List),
     iconBg: 'linear-gradient(135deg, #f59e0b20, #d9770620)',
     iconColor: '#f59e0b',
-    value: 386,
+    value: 0,
     label: '本月新增',
-    trend: 8.2,
+    trend: 0,
     progress: undefined
   },
   {
@@ -341,42 +359,88 @@ const statsCards = reactive([
     icon: markRaw(Search),
     iconBg: 'linear-gradient(135deg, #10b98120, #05966920)',
     iconColor: '#10b981',
-    value: 11520,
+    value: 0,
     label: '全文索引量',
-    trend: 5.3,
-    progress: 89.6
+    trend: 0,
+    progress: undefined
   },
   {
     type: 'vector',
     icon: markRaw(Connection),
     iconBg: 'linear-gradient(135deg, #3b82f620, #2563eb20)',
     iconColor: '#3b82f6',
-    value: 8960,
+    value: 0,
     label: '向量索引量',
-    trend: 15.8,
-    progress: 69.7
+    trend: 0,
+    progress: undefined
   },
   {
     type: 'graph',
     icon: markRaw(Grid),
     iconBg: 'linear-gradient(135deg, #8b5cf620, #7c3aed20)',
     iconColor: '#8b5cf6',
-    value: 4528,
+    value: 0,
     label: '图谱节点数',
-    trend: 22.1,
-    progress: 35.2
+    trend: 0,
+    progress: undefined
   },
   {
     type: 'users',
     icon: markRaw(User),
     iconBg: 'linear-gradient(135deg, #ec489920, #db277720)',
     iconColor: '#ec4899',
-    value: 128,
+    value: 0,
     label: '用户总数',
-    trend: 3.6,
+    trend: 0,
     progress: undefined
   }
 ])
+
+// 更新统计卡片
+const updateStatsCards = () => {
+  statsCards[0].value = portalData.value.total || 0
+  statsCards[1].value = portalData.value.monthly_new || 0
+  statsCards[2].value = portalData.value.es_indexed || 0
+  if (portalData.value.total > 0) {
+    statsCards[2].progress = Math.round((portalData.value.es_indexed / portalData.value.total) * 100)
+  }
+  statsCards[3].value = portalData.value.vector_indexed || 0
+  if (portalData.value.total > 0) {
+    statsCards[3].progress = Math.round((portalData.value.vector_indexed / portalData.value.total) * 100)
+  }
+  statsCards[4].value = portalData.value.graph_nodes || 0
+  if (portalData.value.total > 0) {
+    statsCards[4].progress = Math.round((portalData.value.graph_nodes / portalData.value.total) * 100)
+  }
+  statsCards[5].value = portalData.value.user_count || 0
+}
+
+// 加载门户数据
+const loadPortalStats = async () => {
+  try {
+    loading.value = true
+    const params = {}
+    if (dateRange.value && dateRange.value.length === 2) {
+      params.date_from = dateRange.value[0]
+      params.date_to = dateRange.value[1]
+    }
+    const [statsRes, activitiesRes, progressRes] = await Promise.all([
+      knowledgeApi.portalStats(params),
+      knowledgeApi.recentActivities(10),
+      knowledgeApi.indexProgress()
+    ])
+    portalData.value = statsRes
+    recentActivity.value = activitiesRes
+    // 清空并重新填充 indexProgress
+    indexProgress.splice(0, indexProgress.length, ...progressRes)
+    updateStatsCards()
+    updateCharts()
+  } catch (error) {
+    console.error('加载门户数据失败', error)
+  } finally {
+    loading.value = false
+  }
+}
 
 // 快捷操作
 const quickActions = [
@@ -423,12 +487,16 @@ const activityChartRef = ref(null)
 
 // 初始化所有图表
 const initCharts = () => {
-  initTrendChart()
-  initCategoryChart()
-  initStatusChart()
-  initTagsChart()
-  initSourceChart()
-  initActivityChart()
+  try {
+    initTrendChart()
+    initCategoryChart()
+    initStatusChart()
+    initTagsChart()
+    initSourceChart()
+    initActivityChart()
+  } catch (e) {
+    console.error('初始化图表失败:', e)
+  }
 }
 
 // 知识增长趋势图
@@ -436,21 +504,24 @@ const initTrendChart = () => {
   if (!trendChartRef.value) return
   trendChart = echarts.init(trendChartRef.value)
 
+  // 优先使用真实数据，否则使用占位数据
+  const hasRealData = portalData.value.trend?.length > 0
+
   const periodData = {
     week: {
       labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
-      newData: [12, 18, 15, 22, 28, 35, 42],
-      indexData: [10, 15, 13, 20, 26, 32, 38]
+      newData: hasRealData ? portalData.value.trend.slice(-7).map(item => item.new_count) : [12, 18, 15, 22, 28, 35, 42],
+      indexData: hasRealData ? portalData.value.trend.slice(-7).map(item => item.index_count) : [10, 15, 13, 20, 26, 32, 38]
     },
     month: {
-      labels: ['第1周', '第2周', '第3周', '第4周'],
-      newData: [85, 120, 150, 180],
-      indexData: [75, 100, 130, 160]
+      labels: hasRealData ? portalData.value.trend.map(item => item.date.slice(5)) : ['第1周', '第2周', '第3周', '第4周'],
+      newData: hasRealData ? portalData.value.trend.map(item => item.new_count) : [85, 120, 150, 180],
+      indexData: hasRealData ? portalData.value.trend.map(item => item.index_count) : [75, 100, 130, 160]
     },
     year: {
       labels: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
-      newData: [320, 450, 380, 520, 680, 750, 820, 780, 900, 1050, 980, 1120],
-      indexData: [280, 380, 320, 460, 580, 650, 720, 680, 800, 920, 860, 1000]
+      newData: hasRealData ? portalData.value.trend.map(item => item.new_count) : [320, 450, 380, 520, 680, 750, 820, 780, 900, 1050, 980, 1120],
+      indexData: hasRealData ? portalData.value.trend.map(item => item.index_count) : [280, 380, 320, 460, 580, 650, 720, 680, 800, 920, 860, 1000]
     }
   }
 
@@ -515,10 +586,14 @@ const initTrendChart = () => {
         lineStyle: { width: 3, color: '#667eea' },
         itemStyle: { color: '#667eea', borderColor: '#fff', borderWidth: 2 },
         areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(102, 126, 234, 0.35)' },
-            { offset: 1, color: 'rgba(102, 126, 234, 0.02)' }
-          ])
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(102, 126, 234, 0.35)' },
+              { offset: 1, color: 'rgba(102, 126, 234, 0.02)' }
+            ]
+          }
         },
         data: current.newData,
         emphasis: {
@@ -535,10 +610,14 @@ const initTrendChart = () => {
         lineStyle: { width: 3, color: '#10b981' },
         itemStyle: { color: '#10b981', borderColor: '#fff', borderWidth: 2 },
         areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(16, 185, 129, 0.35)' },
-            { offset: 1, color: 'rgba(16, 185, 129, 0.02)' }
-          ])
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(16, 185, 129, 0.35)' },
+              { offset: 1, color: 'rgba(16, 185, 129, 0.02)' }
+            ]
+          }
         },
         data: current.indexData,
         emphasis: {
@@ -557,13 +636,35 @@ const initCategoryChart = () => {
   if (!categoryChartRef.value) return
   categoryChart = echarts.init(categoryChartRef.value)
 
-  const categoryData = [
-    { value: 4200, name: '法律法规', itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#667eea' }, { offset: 1, color: '#764ba2' }]) } },
-    { value: 3200, name: '技术标准', itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#10b981' }, { offset: 1, color: '#059669' }]) } },
-    { value: 2400, name: '执法案例', itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#f59e0b' }, { offset: 1, color: '#d97706' }]) } },
-    { value: 1800, name: '政策文件', itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#ec4899' }, { offset: 1, color: '#db2777' }]) } },
-    { value: 1256, name: '其他', itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#8b5cf6' }, { offset: 1, color: '#7c3aed' }]) } }
+  const categoryColors = [
+    ['#667eea', '#764ba2'],
+    ['#10b981', '#059669'],
+    ['#f59e0b', '#d97706'],
+    ['#ec4899', '#db2777'],
+    ['#8b5cf6', '#7c3aed']
   ]
+
+  const categoryData = (portalData.value.categories || []).map((cat, index) => {
+    const colorPair = categoryColors[index % categoryColors.length]
+    return {
+      value: cat.count,
+      name: cat.category_name,
+      itemStyle: {
+        color: {
+          type: 'linear',
+          x: 0, y: 0, x2: 0, y2: 1,
+          colorStops: [
+            { offset: 0, color: colorPair[0] },
+            { offset: 1, color: colorPair[1] }
+          ]
+        }
+      }
+    }
+  })
+
+  if (!categoryData.length) {
+    categoryData.push({ value: 1, name: '暂无数据', itemStyle: { color: '#e2e8f0' } })
+  }
 
   const option = categoryType.value === 'rose' ? {
     tooltip: {
@@ -629,6 +730,13 @@ const initStatusChart = () => {
   if (!statusChartRef.value) return
   statusChart = echarts.init(statusChartRef.value)
 
+  const indexData = portalData.value.index_status || []
+  const categories = indexData.map(s => s.category_name)
+  const completedData = indexData.map(s => s.completed)
+  const inProgressData = indexData.map(s => s.in_progress)
+  const pendingData = indexData.map(s => s.pending)
+  const failedData = indexData.map(s => s.failed)
+
   const option = {
     tooltip: {
       trigger: 'axis',
@@ -646,7 +754,7 @@ const initStatusChart = () => {
     grid: { left: '3%', right: '4%', bottom: '18%', top: '8%', containLabel: true },
     xAxis: {
       type: 'category',
-      data: ['法律法规', '技术标准', '执法案例', '政策文件', '其他'],
+      data: categories.length ? categories : ['无数据'],
       axisLine: { lineStyle: { color: '#e2e8f0' } },
       axisLabel: { color: '#64748b', fontSize: 11, rotate: 15 }
     },
@@ -662,32 +770,70 @@ const initStatusChart = () => {
         type: 'bar',
         stack: 'total',
         barWidth: '50%',
-        itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#10b981' }, { offset: 1, color: '#34d399' }]), borderRadius: [0, 0, 0, 0] },
-        data: [3200, 2600, 1800, 1400, 800]
+        itemStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: '#10b981' },
+              { offset: 1, color: '#34d399' }
+            ]
+          },
+          borderRadius: [0, 0, 0, 0]
+        },
+        data: completedData.length ? completedData : [0]
       },
       {
         name: '进行中',
         type: 'bar',
         stack: 'total',
         barWidth: '50%',
-        itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#667eea' }, { offset: 1, color: '#818cf8' }]) },
-        data: [400, 300, 250, 180, 150]
+        itemStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: '#667eea' },
+              { offset: 1, color: '#818cf8' }
+            ]
+          }
+        },
+        data: inProgressData.length ? inProgressData : [0]
       },
       {
         name: '待处理',
         type: 'bar',
         stack: 'total',
         barWidth: '50%',
-        itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#f59e0b' }, { offset: 1, color: '#fbbf24' }]) },
-        data: [350, 200, 200, 120, 186]
+        itemStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: '#f59e0b' },
+              { offset: 1, color: '#fbbf24' }
+            ]
+          }
+        },
+        data: pendingData.length ? pendingData : [0]
       },
       {
         name: '失败',
         type: 'bar',
         stack: 'total',
         barWidth: '50%',
-        itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: '#ef4444' }, { offset: 1, color: '#f87171' }]), borderRadius: [4, 4, 0, 0] },
-        data: [250, 100, 150, 100, 120]
+        itemStyle: {
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: '#ef4444' },
+              { offset: 1, color: '#f87171' }
+            ]
+          },
+          borderRadius: [4, 4, 0, 0]
+        },
+        data: failedData.length ? failedData : [0]
       }
     ]
   }
@@ -701,23 +847,14 @@ const initTagsChart = () => {
   tagsChart = echarts.init(tagsChartRef.value)
 
   if (tagsType.value === 'word') {
-    const tagsData = [
-      { name: '施工安全', value: 156 },
-      { name: '建筑设计', value: 134 },
-      { name: '消防规范', value: 112 },
-      { name: '市政工程', value: 98 },
-      { name: '园林绿化', value: 87 },
-      { name: '装修标准', value: 76 },
-      { name: '抗震设计', value: 65 },
-      { name: '节能规范', value: 54 },
-      { name: '给排水', value: 43 },
-      { name: '电气安全', value: 32 },
-      { name: '暖通空调', value: 28 },
-      { name: '质量安全', value: 25 },
-      { name: '验收标准', value: 22 },
-      { name: '监理规范', value: 18 },
-      { name: '招标投标', value: 15 }
-    ]
+    const tagsData = (portalData.value.tags || []).map(tag => ({
+      name: tag.tag,
+      value: tag.count
+    }))
+
+    if (!tagsData.length) {
+      tagsData.push({ name: '暂无数据', value: 1 })
+    }
 
     const option = {
       tooltip: {
@@ -759,6 +896,15 @@ const initTagsChart = () => {
 
     tagsChart.setOption(option)
   } else {
+    const tagsBarData = (portalData.value.tags || []).map(tag => ({
+      name: tag.tag,
+      value: tag.count
+    })).reverse()
+
+    if (!tagsBarData.length) {
+      tagsBarData.push({ name: '暂无数据', value: 0 })
+    }
+
     const option = {
       tooltip: {
         trigger: 'axis',
@@ -777,21 +923,25 @@ const initTagsChart = () => {
       },
       yAxis: {
         type: 'category',
-        data: ['招标投标', '监理规范', '验收标准', '质量安全', '暖通空调', '电气安全', '给排水', '节能规范', '抗震设计', '装修标准', '园林绿化', '市政工程', '消防规范', '建筑设计', '施工安全'].reverse(),
+        data: tagsBarData.map(t => t.name),
         axisLine: { show: false },
         axisLabel: { color: '#64748b', fontSize: 10 }
       },
       series: [{
         type: 'bar',
-        data: [15, 18, 22, 25, 28, 32, 43, 54, 65, 76, 87, 98, 112, 134, 156].reverse(),
+        data: tagsBarData.map(t => t.value),
         barWidth: '50%',
         itemStyle: {
           borderRadius: [0, 4, 4, 0],
-          color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
-            { offset: 0, color: '#764ba2' },
-            { offset: 0.5, color: '#667eea' },
-            { offset: 1, color: '#3b82f6' }
-          ])
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 1, y2: 0,
+            colorStops: [
+              { offset: 0, color: '#764ba2' },
+              { offset: 0.5, color: '#667eea' },
+              { offset: 1, color: '#3b82f6' }
+            ]
+          }
         },
         label: { show: true, position: 'right', color: '#64748b', fontSize: 10, formatter: '{c}' }
       }]
@@ -805,6 +955,15 @@ const initTagsChart = () => {
 const initSourceChart = () => {
   if (!sourceChartRef.value) return
   sourceChart = echarts.init(sourceChartRef.value)
+
+  const sourceData = (portalData.value.sources || []).map(s => ({
+    name: s.source,
+    value: s.count
+  })).reverse()
+
+  if (!sourceData.length) {
+    sourceData.push({ name: '暂无数据', value: 0 })
+  }
 
   const option = {
     tooltip: {
@@ -824,22 +983,19 @@ const initSourceChart = () => {
     },
     yAxis: {
       type: 'category',
-      data: ['其他来源', '行业标准', '国家标准', '地方规定', '部委规章', '行政法规', '国务院令', '全国人大', '住建部文', '法律法规'].reverse(),
+      data: sourceData.map(s => s.name),
       axisLine: { show: false },
       axisLabel: { color: '#64748b', fontSize: 10 }
     },
     series: [{
       type: 'bar',
-      data: [120, 185, 268, 342, 425, 518, 632, 745, 856, 986].reverse(),
+      data: sourceData.map(s => s.value),
       barWidth: '55%',
       itemStyle: {
         borderRadius: [4, 4, 0, 0],
         color: function(params) {
           const colors = ['#667eea', '#764ba2', '#10b981', '#f59e0b', '#ec4899', '#3b82f6', '#8b5cf6', '#ef4444', '#06b6d4', '#84cc16']
-          return new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: colors[params.dataIndex] },
-            { offset: 1, color: colors[params.dataIndex] + '80' }
-          ])
+          return colors[params.dataIndex % colors.length]
         }
       },
       label: { show: true, position: 'top', color: '#64748b', fontSize: 9, formatter: '{c}' }
@@ -936,71 +1092,69 @@ const initActivityChart = () => {
   activityChart.setOption(option)
 }
 
+// 更新图表（使用真实数据）
+const updateCharts = () => {
+  updateTrendChart()
+  updateCategoryChart()
+  updateStatusChart()
+  updateTagsChart()
+  updateSourceChart()
+  updateActivityChart()
+}
+
 // 更新趋势图
 const updateTrendChart = () => {
   if (trendChart) {
-    const periodData = {
-      week: {
-        labels: ['周一', '周二', '周三', '周四', '周五', '周六', '周日'],
-        newData: [12, 18, 15, 22, 28, 35, 42],
-        indexData: [10, 15, 13, 20, 26, 32, 38]
-      },
-      month: {
-        labels: ['第1周', '第2周', '第3周', '第4周'],
-        newData: [85, 120, 150, 180],
-        indexData: [75, 100, 130, 160]
-      },
-      year: {
-        labels: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
-        newData: [320, 450, 380, 520, 680, 750, 820, 780, 900, 1050, 980, 1120],
-        indexData: [280, 380, 320, 460, 580, 650, 720, 680, 800, 920, 860, 1000]
-      }
+    const hasData = portalData.value.trend?.length > 0
+    if (hasData) {
+      // 重新初始化图表以确保渐变等配置正确应用
+      initTrendChart()
     }
-
-    const current = periodData[trendPeriod.value]
-    trendChart.setOption({
-      xAxis: { data: current.labels },
-      series: [
-        { data: current.newData },
-        { data: current.indexData }
-      ]
-    })
   }
 }
 
 // 更新分类图
 const updateCategoryChart = () => {
-  if (categoryChart) {
+  if (categoryChart && portalData.value.categories?.length) {
     categoryChart.dispose()
     initCategoryChart()
   }
 }
 
+// 更新状态图
+const updateStatusChart = () => {
+  if (statusChart && portalData.value.index_status?.length) {
+    statusChart.dispose()
+    initStatusChart()
+  }
+}
+
 // 更新标签图
 const updateTagsChart = () => {
-  if (tagsChart) {
+  if (tagsChart && portalData.value.tags?.length) {
     tagsChart.dispose()
     initTagsChart()
+  }
+}
+
+// 更新来源图
+const updateSourceChart = () => {
+  if (sourceChart && portalData.value.sources?.length) {
+    sourceChart.dispose()
+    initSourceChart()
   }
 }
 
 // 刷新数据
 const refreshData = async () => {
   refreshing.value = true
-  await new Promise(resolve => setTimeout(resolve, 1500))
-
-  // 更新统计数据
-  statsCards.forEach(card => {
-    card.value = Math.floor(card.value * (1 + Math.random() * 0.1))
-    card.trend = (Math.random() * 30 - 5).toFixed(1) * 1
-  })
-
+  await loadPortalStats()
   refreshing.value = false
 }
 
 // 日期变化
 const handleDateChange = () => {
-  console.log('日期范围变化:', dateRange.value)
+  loadPortalStats()
 }
 
 // 加载更多动态
@@ -1031,6 +1185,10 @@ const handleResize = () => {
 onMounted(() => {
   nextTick(() => {
     initCharts()
+    loadPortalStats().catch(err => {
+      console.error('加载门户数据失败:', err)
+      ElMessage.error('加载统计数据失败，请刷新页面重试')
+    })
   })
   window.addEventListener('resize', handleResize)
 })

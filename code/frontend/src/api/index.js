@@ -107,6 +107,12 @@ export const knowledgeApi = {
   addComment: (id, content) => request.post(`/knowledge/${id}/comments`, { content }),
   // 知识统计
   stats: () => request.get('/knowledge/stats'),
+  // 门户统计数据
+  portalStats: (params) => request.get('/knowledge/stats/portal', { params }),
+  // 最近动态
+  recentActivities: (limit) => request.get('/knowledge/stats/recent-activities', { params: { limit } }),
+  // 索引进度
+  indexProgress: () => request.get('/knowledge/stats/index-progress'),
   // 重建索引
   rebuild: (id, type) => request.post(`/knowledge/${id}/rebuild/${type}`),
   // 清空索引

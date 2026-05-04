@@ -104,6 +104,7 @@ class SearchService:
             return None
 
     def search_keyword(self, query: str, user_id: str, category: Optional[str] = None,
+                       source: Optional[str] = None,
                        page: int = 1, page_size: int = 20, is_admin: bool = False) -> Dict[str, Any]:
         """关键词搜索（ES）"""
         self.ensure_es_index()
@@ -122,6 +123,9 @@ class SearchService:
 
         if category:
             must_conditions.append({"term": {"category": category}})
+
+        if source:
+            must_conditions.append({"term": {"source": source}})
 
         body = {
             "query": {

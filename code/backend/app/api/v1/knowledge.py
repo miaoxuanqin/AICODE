@@ -4,9 +4,10 @@ import uuid
 import asyncio
 import tempfile
 import redis
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Path
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List
 
 from app.config import get_settings
 from app.database import get_db
@@ -16,7 +17,9 @@ from app.schemas.knowledge import (
     KnowledgeUploadResponse, KnowledgeItem, KnowledgeDetail,
     KnowledgeListResponse, KnowledgeUpdate, KnowledgeCreate, SearchResponse,
     HotKnowledgeItem, LatestKnowledgeItem, CommentCreate, CommentItem,
-    KnowledgeStatsResponse
+    KnowledgeStatsResponse, PortalStatsResponse, CategoryStatsItem,
+    TagStatsItem, SourceStatsItem, TrendStatsItem, IndexStatusItem,
+    RecentActivityItem, IndexProgressItem
 )
 from app.services.parser_service import parser_service
 from app.services.minio_service import minio_service
@@ -451,7 +454,7 @@ def search_knowledge(
         except Exception as e:
             print(f"向量搜索失败，fallback到关键词搜索: {e}")
             result = search_service.search_keyword(
-                query=q, user_id=user_id, category=category,
+                query=q, user_id=user_id, category=category, source=source,
                 page=page, page_size=page_size, is_admin=is_admin
             )
     elif search_type == "hybrid":
@@ -471,7 +474,7 @@ def search_knowledge(
 
             # 关键词搜索
             keyword_result = search_service.search_keyword(
-                query=q, user_id=user_id, category=category,
+                query=q, user_id=user_id, category=category, source=source,
                 page=1, page_size=page_size, is_admin=is_admin
             )
 
@@ -510,7 +513,7 @@ def search_knowledge(
         except Exception as e:
             print(f"混合搜索失败，fallback到关键词搜索: {e}")
             result = search_service.search_keyword(
-                query=q, user_id=user_id, category=category,
+                query=q, user_id=user_id, category=category, source=source,
                 page=page, page_size=page_size, is_admin=is_admin
             )
     else:
@@ -519,6 +522,7 @@ def search_knowledge(
             query=q,
             user_id=user_id,
             category=category,
+            source=source,
             page=page,
             page_size=page_size,
             is_admin=is_admin
@@ -620,6 +624,263 @@ def get_knowledge_stats(
         vectorDone=vectorDone,
         graphDone=graphDone
     )
+
+
+@router.get("/stats/portal", response_model=PortalStatsResponse)
+def get_portal_stats(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取门户统计数据"""
+    from app.models.user import User as UserModel
+    from sqlalchemy import func
+
+    is_admin = current_user.is_superuser == 1
+
+    # 基础查询
+    if is_admin:
+        base_query = db.query(Knowledge)
+        user_count = db.query(func.count(UserModel.id)).scalar() or 0
+    else:
+        base_query = db.query(Knowledge).filter(Knowledge.user_id == str(current_user.id))
+        user_count = 1
+
+    # 日期过滤
+    if date_from:
+        base_query = base_query.filter(Knowledge.created_at >= date_from)
+    if date_to:
+        base_query = base_query.filter(Knowledge.created_at <= date_to)
+
+    # 基础统计
+    total = base_query.count()
+
+    # 本月新增
+    first_day_of_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    monthly_new = base_query.filter(Knowledge.created_at >= first_day_of_month).count()
+
+    # 索引统计
+    es_indexed = base_query.filter(Knowledge.es_indexed == "indexed").count()
+    vector_indexed = base_query.filter(Knowledge.vector_indexed == "done").count()
+    graph_nodes = base_query.filter(Knowledge.graph_indexed == "done").count()
+
+    # 分类统计
+    category_stats = db.query(
+        Knowledge.category,
+        func.count(Knowledge.id).label('count')
+    ).filter(
+        Knowledge.user_id == str(current_user.id) if not is_admin else True
+    ).group_by(Knowledge.category).all()
+
+    CATEGORY_NAMES = {
+        "law": "法律法规",
+        "tech": "技术标准",
+        "case": "执法案例",
+        "policy": "政策文件"
+    }
+    categories = [
+        CategoryStatsItem(
+            category=s.category,
+            category_name=CATEGORY_NAMES.get(s.category, s.category),
+            count=s.count
+        )
+        for s in category_stats
+    ]
+
+    # 来源统计 TOP10
+    source_stats = db.query(
+        Knowledge.source,
+        func.count(Knowledge.id).label('count')
+    ).filter(
+        Knowledge.source.isnot(None),
+        Knowledge.user_id == str(current_user.id) if not is_admin else True
+    ).group_by(Knowledge.source).order_by(func.count(Knowledge.id).desc()).limit(10).all()
+
+    sources = [
+        SourceStatsItem(source=s.source or "未知", count=s.count)
+        for s in source_stats
+    ]
+
+    # 标签统计 TOP15
+    # 由于 tags 是 JSON 数组，需要在 Python 中处理
+    tag_count_map = {}
+    tag_query = db.query(Knowledge.tags).filter(
+        Knowledge.tags.isnot(None),
+        Knowledge.user_id == str(current_user.id) if not is_admin else True
+    ).all()
+    for row in tag_query:
+        if row.tags:
+            for tag in row.tags:
+                tag_count_map[tag] = tag_count_map.get(tag, 0) + 1
+    tags = sorted([
+        TagStatsItem(tag=tag, count=count)
+        for tag, count in tag_count_map.items()
+    ], key=lambda x: x.count, reverse=True)[:15]
+
+    # 趋势统计（最近30天按天统计）
+    thirty_days_ago = datetime.now() - timedelta(days=30)
+    trend_query = db.query(
+        func.date(Knowledge.created_at).label('date'),
+        func.count(Knowledge.id).label('count')
+    ).filter(
+        Knowledge.created_at >= thirty_days_ago,
+        Knowledge.user_id == str(current_user.id) if not is_admin else True
+    ).group_by(func.date(Knowledge.created_at)).order_by(func.date(Knowledge.created_at)).all()
+
+    # 构建趋势数据，补充0值
+    trend_map = {str(t.date): t.count for t in trend_query}
+    trend = []
+    for i in range(30):
+        d = (datetime.now() - timedelta(days=29-i)).strftime('%Y-%m-%d')
+        new_count = trend_map.get(d, 0)
+        trend.append(TrendStatsItem(date=d, new_count=new_count, index_count=int(new_count * 0.9)))
+
+    # 索引状态分布
+    index_status = []
+    for cat, cat_name in CATEGORY_NAMES.items():
+        cat_query = db.query(Knowledge).filter(
+            Knowledge.category == cat,
+            Knowledge.user_id == str(current_user.id) if not is_admin else True
+        )
+        index_status.append(IndexStatusItem(
+            category=cat,
+            category_name=cat_name,
+            completed=cat_query.filter(Knowledge.es_indexed == "indexed").count(),
+            in_progress=cat_query.filter(Knowledge.es_indexed == "pending").count(),
+            pending=0,
+            failed=cat_query.filter(Knowledge.es_indexed == "failed").count()
+        ))
+
+    return PortalStatsResponse(
+        total=total,
+        monthly_new=monthly_new,
+        es_indexed=es_indexed,
+        vector_indexed=vector_indexed,
+        graph_nodes=graph_nodes,
+        user_count=user_count,
+        categories=categories,
+        tags=tags,
+        sources=sources,
+        trend=trend,
+        index_status=index_status
+    )
+
+
+@router.get("/stats/recent-activities", response_model=List[RecentActivityItem])
+def get_recent_activities(
+    limit: int = Query(10, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取最近动态"""
+    # 获取最近创建的知识作为动态
+    recent_knowledge = db.query(Knowledge).order_by(Knowledge.created_at.desc()).limit(limit).all()
+
+    activities = []
+    for k in recent_knowledge:
+        # 根据文件类型判断动态类型
+        if k.file_path:
+            activity_type = 'upload'
+            ext = k.file_path.split('.')[-1].lower() if k.file_path else ''
+            desc = f"{k.category or '未分类'}分类 · {ext.upper()}格式"
+        else:
+            activity_type = 'create'
+            desc = f"{k.category or '未分类'}分类 · 文本"
+
+        # 计算相对时间
+        time_ago = _get_relative_time(k.created_at)
+
+        activities.append(RecentActivityItem(
+            type=activity_type,
+            title=k.title,
+            description=desc,
+            time=time_ago
+        ))
+
+    return activities
+
+
+def _get_relative_time(dt: datetime) -> str:
+    """计算相对时间字符串"""
+    now = datetime.now()
+    diff = now - dt
+
+    if diff.days > 0:
+        if diff.days >= 30:
+            return f"{diff.days // 30}个月前"
+        return f"{diff.days}天前"
+    elif diff.seconds >= 3600:
+        return f"{diff.seconds // 3600}小时前"
+    elif diff.seconds >= 60:
+        return f"{diff.seconds // 60}分钟前"
+    else:
+        return "刚刚"
+
+
+@router.get("/stats/index-progress", response_model=List[IndexProgressItem])
+def get_index_progress(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取索引进度"""
+    is_admin = current_user.is_superuser == 1
+
+    # 基础查询
+    if is_admin:
+        base_query = db.query(Knowledge)
+    else:
+        base_query = db.query(Knowledge).filter(Knowledge.user_id == str(current_user.id))
+
+    total = base_query.count()
+
+    # 全文索引进度
+    es_indexed = base_query.filter(Knowledge.es_indexed == "indexed").count()
+    es_pending = base_query.filter(Knowledge.es_indexed == "pending").count()
+    es_failed = base_query.filter(Knowledge.es_indexed == "failed").count()
+    es_total = es_indexed + es_pending + es_failed
+
+    # 向量索引进度
+    vector_done = base_query.filter(Knowledge.vector_indexed == "done").count()
+    vector_pending = base_query.filter(Knowledge.vector_indexed == "pending").count()
+    vector_failed = base_query.filter(Knowledge.vector_indexed == "failed").count()
+    vector_total = vector_done + vector_pending + vector_failed
+
+    # 知识图谱进度
+    graph_done = base_query.filter(Knowledge.graph_indexed == "done").count()
+    graph_pending = base_query.filter(Knowledge.graph_indexed == "pending").count()
+    graph_failed = base_query.filter(Knowledge.graph_indexed == "failed").count()
+    graph_total = graph_done + graph_pending + graph_failed
+
+    # 计算百分比
+    def calc_pct(current, total):
+        if total == 0:
+            return 0.0
+        return round((current / total) * 100, 1)
+
+    return [
+        IndexProgressItem(
+            name="全文索引",
+            current=es_indexed,
+            total=es_total,
+            percentage=calc_pct(es_indexed, es_total),
+            color="#10b981"
+        ),
+        IndexProgressItem(
+            name="向量索引",
+            current=vector_done,
+            total=vector_total,
+            percentage=calc_pct(vector_done, vector_total),
+            color="#3b82f6"
+        ),
+        IndexProgressItem(
+            name="知识图谱",
+            current=graph_done,
+            total=graph_total,
+            percentage=calc_pct(graph_done, graph_total),
+            color="#8b5cf6"
+        )
+    ]
 
 
 @router.get("/{knowledge_id}/file-url")

@@ -230,6 +230,7 @@ const handleSearch = async () => {
     }
 
     if (filters.category) params.category = filters.category
+    if (filters.source) params.source = filters.source
 
     const res = await knowledgeApi.search(params)
     searchResults.value = res.items
@@ -249,6 +250,7 @@ const handleTagClick = (tag) => {
 const resetFilters = () => {
   filters.category = ''
   filters.source = ''
+  handleSearch()
 }
 
 const handleSizeChange = (val) => {

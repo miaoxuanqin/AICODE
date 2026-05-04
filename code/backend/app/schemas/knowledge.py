@@ -107,3 +107,63 @@ class KnowledgeStatsResponse(BaseModel):
     esIndexed: int = 0
     vectorDone: int = 0
     graphDone: int = 0
+
+
+class CategoryStatsItem(BaseModel):
+    category: str
+    category_name: str
+    count: int
+
+
+class TagStatsItem(BaseModel):
+    tag: str
+    count: int
+
+
+class SourceStatsItem(BaseModel):
+    source: str
+    count: int
+
+
+class TrendStatsItem(BaseModel):
+    date: str
+    new_count: int
+    index_count: int
+
+
+class IndexStatusItem(BaseModel):
+    category: str
+    category_name: str
+    completed: int
+    in_progress: int
+    pending: int
+    failed: int
+
+
+class PortalStatsResponse(BaseModel):
+    total: int = 0
+    monthly_new: int = 0
+    es_indexed: int = 0
+    vector_indexed: int = 0
+    graph_nodes: int = 0
+    user_count: int = 0
+    categories: List[CategoryStatsItem] = []
+    tags: List[TagStatsItem] = []
+    sources: List[SourceStatsItem] = []
+    trend: List[TrendStatsItem] = []
+    index_status: List[IndexStatusItem] = []
+
+
+class RecentActivityItem(BaseModel):
+    type: str  # upload, create, update, delete, search
+    title: str
+    description: str
+    time: str
+
+
+class IndexProgressItem(BaseModel):
+    name: str
+    current: int
+    total: int
+    percentage: float
+    color: str
