@@ -104,7 +104,7 @@ def get_category_name(category: str) -> str:
 async def upload_knowledge(
     file: UploadFile = File(...),
     title: Optional[str] = Form(None),
-    category: str = Form(..., pattern="^(law|tech|case|policy)$"),
+    category: str = Form(...),
     source: Optional[str] = Form(None),
     tags: Optional[str] = Form(None),
     current_user: User = Depends(get_current_user),
@@ -324,7 +324,7 @@ async def create_knowledge_manual(
 def list_knowledge(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    category: Optional[str] = Query(None, pattern="^(law|tech|case|policy)$"),
+    category: Optional[str] = Query(None, description="分类ID"),
     keyword: Optional[str] = Query(None),
     type: Optional[str] = Query(None, description="文件类型: pdf, doc, text"),
     es_indexed: Optional[str] = Query(None, description="全文检索状态: indexed, pending, failed"),
@@ -400,7 +400,7 @@ def list_knowledge(
 def search_knowledge(
     q: str = Query(..., min_length=1),
     search_type: str = Query("keyword", pattern="^(keyword|vector|hybrid)$"),
-    category: Optional[str] = Query(None, pattern="^(law|tech|case|policy)$"),
+    category: Optional[str] = Query(None, description="分类ID"),
     source: Optional[str] = Query(None),
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),

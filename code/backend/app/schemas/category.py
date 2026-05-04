@@ -5,7 +5,7 @@ from datetime import datetime
 
 class CategoryCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
-    parent_id: Optional[str] = None
+    parent_id: Optional[int] = None
     level: int = 1
     description: Optional[str] = None
     sort_order: int = 0
@@ -13,7 +13,7 @@ class CategoryCreate(BaseModel):
 
 class CategoryUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
-    parent_id: Optional[str] = None
+    parent_id: Optional[int] = None
     level: Optional[int] = None
     description: Optional[str] = None
     sort_order: Optional[int] = None

@@ -13,10 +13,14 @@
         node-key="id"
         default-expand-all
         highlight-current
+        :expand-on-click-node="false"
         @node-click="handleCategoryNodeClick"
       >
         <template #default="{ node, data }">
           <span class="tree-node">
+            <span v-if="data.id === ''" class="node-icon">📁</span>
+            <span v-else-if="data.children && data.children.length > 0" class="node-icon">📂</span>
+            <span v-else class="node-icon">📄</span>
             <span class="node-label">{{ node.label }}</span>
             <span class="node-actions">
               <el-button size="small" link type="primary" @click.stop="showCategoryDialog('edit', data)">编辑</el-button>
@@ -31,290 +35,291 @@
     <div class="main-content">
       <!-- 页面标题栏 -->
       <div class="page-header">
-      <div class="header-left">
-        <h1 class="page-title">知识管理</h1>
-        <p class="page-subtitle">管理所有知识内容，包括文档和文本</p>
-      </div>
-      <div class="header-actions">
-        <el-button type="success" @click="showTextDialog = true">
-          <el-icon><Edit /></el-icon>
-          添加文本
-        </el-button>
-        <el-button type="primary" @click="showUploadDialog = true">
-          <el-icon><Upload /></el-icon>
-          上传文档
-        </el-button>
-      </div>
-    </div>
-
-    <!-- 统计卡片 -->
-    <div class="stats-grid">
-      <div class="stat-card" @click="handleStatsClick('total')">
-        <div class="stat-header">
-          <div class="stat-icon total">
-            <el-icon><Document /></el-icon>
-          </div>
-          <span class="stat-trend up">+12%</span>
+        <div class="header-left">
+          <h1 class="page-title">知识管理</h1>
+          <p class="page-subtitle">管理所有知识内容，包括文档和文本</p>
         </div>
-        <div class="stat-value">{{ stats.total }}</div>
-        <div class="stat-label">知识总数</div>
-        <div class="stat-bar">
-          <div class="stat-bar-fill total" :style="{ width: '100%' }"></div>
-        </div>
-      </div>
-      <div class="stat-card" @click="handleStatsClick('es')">
-        <div class="stat-header">
-          <div class="stat-icon es">
-            <el-icon><Search /></el-icon>
-          </div>
-          <span class="stat-trend">{{ Math.round(stats.esIndexed / stats.total * 100) || 0 }}%</span>
-        </div>
-        <div class="stat-value">{{ stats.esIndexed }}</div>
-        <div class="stat-label">全文检索 已索引</div>
-        <div class="stat-bar">
-          <div class="stat-bar-fill es" :style="{ width: (stats.esIndexed / stats.total * 100) + '%' }"></div>
-        </div>
-      </div>
-      <div class="stat-card" @click="handleStatsClick('vector')">
-        <div class="stat-header">
-          <div class="stat-icon vector">
-            <el-icon><Connection /></el-icon>
-          </div>
-          <span class="stat-trend pending">{{ Math.round(stats.vectorDone / stats.total * 100) || 0 }}%</span>
-        </div>
-        <div class="stat-value">{{ stats.vectorDone }}</div>
-        <div class="stat-label">已语义搜索</div>
-        <div class="stat-bar">
-          <div class="stat-bar-fill vector" :style="{ width: (stats.vectorDone / stats.total * 100) + '%' }"></div>
-        </div>
-      </div>
-      <div class="stat-card" @click="handleStatsClick('graph')">
-        <div class="stat-header">
-          <div class="stat-icon graph">
-            <el-icon><Grid /></el-icon>
-          </div>
-          <span class="stat-trend pending">{{ Math.round(stats.graphDone / stats.total * 100) || 0 }}%</span>
-        </div>
-        <div class="stat-value">{{ stats.graphDone }}</div>
-        <div class="stat-label">已入知识图谱</div>
-        <div class="stat-bar">
-          <div class="stat-bar-fill graph" :style="{ width: (stats.graphDone / stats.total * 100) + '%' }"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 筛选栏 -->
-    <div class="filter-bar">
-      <div class="search-box">
-        <el-input
-          v-model="filters.keyword"
-          placeholder="搜索知识标题..."
-          clearable
-          @keyup.enter="handleFilter"
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
-      </div>
-      <el-select v-model="filters.type" placeholder="全部类型" clearable @change="handleFilter" style="width: 120px;">
-        <el-option label="全部类型" value="" />
-        <el-option label="PDF文档" value="pdf" />
-        <el-option label="Word文档" value="docx" />
-        <el-option label="文本" value="text" />
-      </el-select>
-      <div class="status-filters">
-        <el-tag
-          :class="['filter-tag', allStatusCleared ? 'active' : '']"
-          @click="clearStatusFilter"
-          type="info"
-        >全部</el-tag>
-        <el-tag
-          :class="['filter-tag', filters.fullTextStatus === 'indexed' ? 'active' : '']"
-          @click="toggleStatusFilter('es')"
-          type="info"
-        >全文检索</el-tag>
-        <el-tag
-          :class="['filter-tag', filters.vectorStatus === 'done' ? 'active' : '']"
-          @click="toggleStatusFilter('vector')"
-          type="info"
-        >语义搜索</el-tag>
-        <el-tag
-          :class="['filter-tag', filters.graphStatus === 'done' ? 'active' : '']"
-          @click="toggleStatusFilter('graph')"
-          type="info"
-        >知识图谱</el-tag>
-      </div>
-      <div class="view-toggle">
-        <el-button-group>
-          <el-button :type="viewMode === 'list' ? 'primary' : ''" @click="viewMode = 'list'">
-            <el-icon><List /></el-icon>
-          </el-button>
-          <el-button :type="viewMode === 'grid' ? 'primary' : ''" @click="viewMode = 'grid'">
-            <el-icon><Grid /></el-icon>
-          </el-button>
-        </el-button-group>
-      </div>
-    </div>
-
-    <!-- 列表视图 -->
-    <div v-if="viewMode === 'list'" class="knowledge-list">
-      <div
-        v-for="item in knowledgeList"
-        :key="item.id"
-        class="knowledge-card"
-        @click="viewFile(item)"
-      >
-        <div class="knowledge-main">
-          <div class="knowledge-header">
-            <el-tag :type="getTypeIcon(item.file_type)" size="small">
-              {{ item.file_type === 'pdf' ? '📕 PDF' : item.file_type === 'html' ? '📝 文本' : item.file_type === 'docx' || item.file_type === 'doc' ? '📄 Word' : '📝 文本' }}
-            </el-tag>
-            <el-tag :type="getCategoryType(item.category)" size="small">{{ item.category_name }}</el-tag>
-          </div>
-          <div class="knowledge-title">{{ item.title }}</div>
-          <div class="knowledge-meta">
-            <span class="meta-item">
-              <el-icon><Document /></el-icon>
-              {{ item.source || '无来源' }}
-            </span>
-            <span class="meta-item">
-              <el-icon><Clock /></el-icon>
-              {{ item.created_at }}
-            </span>
-          </div>
-        </div>
-        <div class="status-list">
-          <div :class="['status-item', 'es', item.es_indexed === 'indexed' ? 'active' : 'pending']">
-            <div class="status-header">
-              <el-icon><Search /></el-icon>
-              <span class="status-label">全文检索</span>
-            </div>
-            <div class="status-value">{{ item.es_indexed === 'indexed' ? '已索引' : '待索引' }}</div>
-            <div class="status-actions">
-              <el-button size="small" type="success" @click.stop="retryProcess(item, 'es')">重建</el-button>
-              <el-button size="small" type="danger" @click.stop="clearProcess(item, 'es')">清空</el-button>
-            </div>
-          </div>
-          <div :class="['status-item', 'vector', item.vector_indexed === 'done' ? 'active' : 'pending']">
-            <div class="status-header">
-              <el-icon><Connection /></el-icon>
-              <span class="status-label">语义搜索</span>
-            </div>
-            <div class="status-value">{{ item.vector_indexed === 'done' ? '已完成' : '待处理' }}</div>
-            <div class="status-actions">
-              <el-button size="small" type="success" @click.stop="retryProcess(item, 'vector')">重建</el-button>
-              <el-button size="small" type="danger" @click.stop="clearProcess(item, 'vector')">清空</el-button>
-            </div>
-          </div>
-          <div :class="['status-item', 'graph', item.graph_indexed === 'done' ? 'active' : 'pending']">
-            <div class="status-header">
-              <el-icon><Grid /></el-icon>
-              <span class="status-label">知识图谱</span>
-            </div>
-            <div class="status-value">{{ item.graph_indexed === 'done' ? '已完成' : '待处理' }}</div>
-            <div class="status-actions">
-              <el-button size="small" type="success" @click.stop="retryProcess(item, 'graph')">重建</el-button>
-              <el-button size="small" type="danger" @click.stop="clearProcess(item, 'graph')">清空</el-button>
-            </div>
-          </div>
-        </div>
-        <div class="action-buttons">
-          <el-button circle type="primary" @click.stop="viewFile(item)" title="查看">
-            <el-icon><View /></el-icon>
-          </el-button>
-          <el-button circle type="success" @click.stop="editItem(item)" title="编辑">
+        <div class="header-actions">
+          <el-button type="success" @click="showTextDialog = true">
             <el-icon><Edit /></el-icon>
+            添加文本
           </el-button>
-          <el-button circle type="danger" @click.stop="deleteItem(item)" title="删除">
-            <el-icon><Delete /></el-icon>
+          <el-button type="primary" @click="showUploadDialog = true">
+            <el-icon><Upload /></el-icon>
+            上传文档
           </el-button>
         </div>
       </div>
-      <el-empty v-if="knowledgeList.length === 0" description="暂无知识内容" />
-    </div>
 
-    <!-- 网格视图 -->
-    <div v-if="viewMode === 'grid'" class="knowledge-grid">
-      <div
-        v-for="item in knowledgeList"
-        :key="item.id"
-        class="knowledge-grid-card"
-        @click="viewFile(item)"
-      >
-        <div class="grid-card-header">
-          <div class="grid-card-title">{{ item.title }}</div>
-          <el-tag size="small">{{ item.file_type === 'pdf' ? 'PDF' : item.file_type === 'html' ? '文本' : (item.file_type === 'docx' || item.file_type === 'doc') ? 'Word' : '文本' }}</el-tag>
+      <!-- 统计卡片 -->
+      <div class="stats-grid">
+        <div class="stat-card" @click="handleStatsClick('total')">
+          <div class="stat-header">
+            <div class="stat-icon total">
+              <el-icon><Document /></el-icon>
+            </div>
+            <span class="stat-trend up">+12%</span>
+          </div>
+          <div class="stat-value">{{ stats.total }}</div>
+          <div class="stat-label">知识总数</div>
+          <div class="stat-bar">
+            <div class="stat-bar-fill total" :style="{ width: '100%' }"></div>
+          </div>
         </div>
-        <div class="grid-card-meta">
-          <el-tag :type="getCategoryType(item.category)" size="small">{{ item.category_name }}</el-tag>
-          <span class="meta-item">{{ item.source || '无来源' }}</span>
-          <span class="meta-item">{{ item.created_at }}</span>
-        </div>
-        <div class="grid-card-status">
-          <div :class="['grid-status-item', 'es', item.es_indexed === 'indexed' ? 'active' : 'pending']">
-            <div class="grid-status-header">
+        <div class="stat-card" @click="handleStatsClick('es')">
+          <div class="stat-header">
+            <div class="stat-icon es">
               <el-icon><Search /></el-icon>
-              <span class="grid-status-label">全文检索</span>
             </div>
-            <div class="grid-status-value">{{ item.es_indexed === 'indexed' ? '已索引' : '待索引' }}</div>
-            <div class="status-actions">
-              <el-button size="small" type="success" @click.stop="retryProcess(item, 'es')">重建</el-button>
-              <el-button size="small" type="danger" @click.stop="clearProcess(item, 'es')">清空</el-button>
-            </div>
+            <span class="stat-trend">{{ Math.round(stats.esIndexed / stats.total * 100) || 0 }}%</span>
           </div>
-          <div :class="['grid-status-item', 'vector', item.vector_indexed === 'done' ? 'active' : 'pending']">
-            <div class="grid-status-header">
-              <el-icon><Connection /></el-icon>
-              <span class="grid-status-label">语义搜索</span>
-            </div>
-            <div class="grid-status-value">{{ item.vector_indexed === 'done' ? '已完成' : '待处理' }}</div>
-            <div class="status-actions">
-              <el-button size="small" type="success" @click.stop="retryProcess(item, 'vector')">重建</el-button>
-              <el-button size="small" type="danger" @click.stop="clearProcess(item, 'vector')">清空</el-button>
-            </div>
-          </div>
-          <div :class="['grid-status-item', 'graph', item.graph_indexed === 'done' ? 'active' : 'pending']">
-            <div class="grid-status-header">
-              <el-icon><Grid /></el-icon>
-              <span class="grid-status-label">知识图谱</span>
-            </div>
-            <div class="grid-status-value">{{ item.graph_indexed === 'done' ? '已完成' : '待处理' }}</div>
-            <div class="status-actions">
-              <el-button size="small" type="success" @click.stop="retryProcess(item, 'graph')">重建</el-button>
-              <el-button size="small" type="danger" @click.stop="clearProcess(item, 'graph')">清空</el-button>
-            </div>
+          <div class="stat-value">{{ stats.esIndexed }}</div>
+          <div class="stat-label">全文检索 已索引</div>
+          <div class="stat-bar">
+            <div class="stat-bar-fill es" :style="{ width: (stats.esIndexed / stats.total * 100) + '%' }"></div>
           </div>
         </div>
-        <div class="grid-card-footer">
-          <div></div>
-          <div class="grid-card-actions">
-            <el-button circle type="primary" size="small" @click.stop="viewFile(item)">
+        <div class="stat-card" @click="handleStatsClick('vector')">
+          <div class="stat-header">
+            <div class="stat-icon vector">
+              <el-icon><Connection /></el-icon>
+            </div>
+            <span class="stat-trend pending">{{ Math.round(stats.vectorDone / stats.total * 100) || 0 }}%</span>
+          </div>
+          <div class="stat-value">{{ stats.vectorDone }}</div>
+          <div class="stat-label">已语义搜索</div>
+          <div class="stat-bar">
+            <div class="stat-bar-fill vector" :style="{ width: (stats.vectorDone / stats.total * 100) + '%' }"></div>
+          </div>
+        </div>
+        <div class="stat-card" @click="handleStatsClick('graph')">
+          <div class="stat-header">
+            <div class="stat-icon graph">
+              <el-icon><Grid /></el-icon>
+            </div>
+            <span class="stat-trend pending">{{ Math.round(stats.graphDone / stats.total * 100) || 0 }}%</span>
+          </div>
+          <div class="stat-value">{{ stats.graphDone }}</div>
+          <div class="stat-label">已入知识图谱</div>
+          <div class="stat-bar">
+            <div class="stat-bar-fill graph" :style="{ width: (stats.graphDone / stats.total * 100) + '%' }"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 筛选栏 -->
+      <div class="filter-bar">
+        <div class="search-box">
+          <el-input
+            v-model="filters.keyword"
+            placeholder="搜索知识标题..."
+            clearable
+            @keyup.enter="handleFilter"
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </div>
+        <el-select v-model="filters.type" placeholder="全部类型" clearable @change="handleFilter" style="width: 120px;">
+          <el-option label="全部类型" value="" />
+          <el-option label="PDF文档" value="pdf" />
+          <el-option label="Word文档" value="docx" />
+          <el-option label="文本" value="text" />
+        </el-select>
+        <div class="status-filters">
+          <el-tag
+            :class="['filter-tag', allStatusCleared ? 'active' : '']"
+            @click="clearStatusFilter"
+            type="info"
+          >全部</el-tag>
+          <el-tag
+            :class="['filter-tag', filters.fullTextStatus === 'indexed' ? 'active' : '']"
+            @click="toggleStatusFilter('es')"
+            type="info"
+          >全文检索</el-tag>
+          <el-tag
+            :class="['filter-tag', filters.vectorStatus === 'done' ? 'active' : '']"
+            @click="toggleStatusFilter('vector')"
+            type="info"
+          >语义搜索</el-tag>
+          <el-tag
+            :class="['filter-tag', filters.graphStatus === 'done' ? 'active' : '']"
+            @click="toggleStatusFilter('graph')"
+            type="info"
+          >知识图谱</el-tag>
+        </div>
+        <div class="view-toggle">
+          <el-button-group>
+            <el-button :type="viewMode === 'list' ? 'primary' : ''" @click="viewMode = 'list'">
+              <el-icon><List /></el-icon>
+            </el-button>
+            <el-button :type="viewMode === 'grid' ? 'primary' : ''" @click="viewMode = 'grid'">
+              <el-icon><Grid /></el-icon>
+            </el-button>
+          </el-button-group>
+        </div>
+      </div>
+
+      <!-- 列表视图 -->
+      <div v-if="viewMode === 'list'" class="knowledge-list">
+        <div
+          v-for="item in knowledgeList"
+          :key="item.id"
+          class="knowledge-card"
+          @click="viewFile(item)"
+        >
+          <div class="knowledge-main">
+            <div class="knowledge-header">
+              <el-tag :type="getTypeIcon(item.file_type)" size="small">
+                {{ item.file_type === 'pdf' ? '📕 PDF' : item.file_type === 'html' ? '📝 文本' : item.file_type === 'docx' || item.file_type === 'doc' ? '📄 Word' : '📝 文本' }}
+              </el-tag>
+              <el-tag :type="getCategoryType(item.category)" size="small">{{ item.category_name }}</el-tag>
+            </div>
+            <div class="knowledge-title">{{ item.title }}</div>
+            <div class="knowledge-meta">
+              <span class="meta-item">
+                <el-icon><Document /></el-icon>
+                {{ item.source || '无来源' }}
+              </span>
+              <span class="meta-item">
+                <el-icon><Clock /></el-icon>
+                {{ item.created_at }}
+              </span>
+            </div>
+          </div>
+          <div class="status-list">
+            <div :class="['status-item', 'es', item.es_indexed === 'indexed' ? 'active' : 'pending']">
+              <div class="status-header">
+                <el-icon><Search /></el-icon>
+                <span class="status-label">全文检索</span>
+              </div>
+              <div class="status-value">{{ item.es_indexed === 'indexed' ? '已索引' : '待索引' }}</div>
+              <div class="status-actions">
+                <el-button size="small" type="success" @click.stop="retryProcess(item, 'es')">重建</el-button>
+                <el-button size="small" type="danger" @click.stop="clearProcess(item, 'es')">清空</el-button>
+              </div>
+            </div>
+            <div :class="['status-item', 'vector', item.vector_indexed === 'done' ? 'active' : 'pending']">
+              <div class="status-header">
+                <el-icon><Connection /></el-icon>
+                <span class="status-label">语义搜索</span>
+              </div>
+              <div class="status-value">{{ item.vector_indexed === 'done' ? '已完成' : '待处理' }}</div>
+              <div class="status-actions">
+                <el-button size="small" type="success" @click.stop="retryProcess(item, 'vector')">重建</el-button>
+                <el-button size="small" type="danger" @click.stop="clearProcess(item, 'vector')">清空</el-button>
+              </div>
+            </div>
+            <div :class="['status-item', 'graph', item.graph_indexed === 'done' ? 'active' : 'pending']">
+              <div class="status-header">
+                <el-icon><Grid /></el-icon>
+                <span class="status-label">知识图谱</span>
+              </div>
+              <div class="status-value">{{ item.graph_indexed === 'done' ? '已完成' : '待处理' }}</div>
+              <div class="status-actions">
+                <el-button size="small" type="success" @click.stop="retryProcess(item, 'graph')">重建</el-button>
+                <el-button size="small" type="danger" @click.stop="clearProcess(item, 'graph')">清空</el-button>
+              </div>
+            </div>
+          </div>
+          <div class="action-buttons">
+            <el-button circle type="primary" @click.stop="viewFile(item)" title="查看">
               <el-icon><View /></el-icon>
             </el-button>
-            <el-button circle type="success" size="small" @click.stop="editItem(item)">
+            <el-button circle type="success" @click.stop="editItem(item)" title="编辑">
               <el-icon><Edit /></el-icon>
             </el-button>
-            <el-button circle type="danger" size="small" @click.stop="deleteItem(item)">
+            <el-button circle type="danger" @click.stop="deleteItem(item)" title="删除">
               <el-icon><Delete /></el-icon>
             </el-button>
           </div>
         </div>
+        <el-empty v-if="knowledgeList.length === 0" description="暂无知识内容" />
       </div>
-      <el-empty v-if="knowledgeList.length === 0" description="暂无知识内容" />
-    </div>
 
-    <!-- 分页 -->
-    <div class="pagination-wrapper">
-      <el-pagination
-        v-model:current-page="pagination.page"
-        v-model:page-size="pagination.pageSize"
-        :total="pagination.total"
-        :page-sizes="[10, 20, 50, 100]"
-        layout="total, sizes, prev, pager, next, jumper"
-        @size-change="loadData"
-        @current-change="loadData"
-      />
+      <!-- 网格视图 -->
+      <div v-if="viewMode === 'grid'" class="knowledge-grid">
+        <div
+          v-for="item in knowledgeList"
+          :key="item.id"
+          class="knowledge-grid-card"
+          @click="viewFile(item)"
+        >
+          <div class="grid-card-header">
+            <div class="grid-card-title">{{ item.title }}</div>
+            <el-tag size="small">{{ item.file_type === 'pdf' ? 'PDF' : item.file_type === 'html' ? '文本' : (item.file_type === 'docx' || item.file_type === 'doc') ? 'Word' : '文本' }}</el-tag>
+          </div>
+          <div class="grid-card-meta">
+            <el-tag :type="getCategoryType(item.category)" size="small">{{ item.category_name }}</el-tag>
+            <span class="meta-item">{{ item.source || '无来源' }}</span>
+            <span class="meta-item">{{ item.created_at }}</span>
+          </div>
+          <div class="grid-card-status">
+            <div :class="['grid-status-item', 'es', item.es_indexed === 'indexed' ? 'active' : 'pending']">
+              <div class="grid-status-header">
+                <el-icon><Search /></el-icon>
+                <span class="grid-status-label">全文检索</span>
+              </div>
+              <div class="grid-status-value">{{ item.es_indexed === 'indexed' ? '已索引' : '待索引' }}</div>
+              <div class="status-actions">
+                <el-button size="small" type="success" @click.stop="retryProcess(item, 'es')">重建</el-button>
+                <el-button size="small" type="danger" @click.stop="clearProcess(item, 'es')">清空</el-button>
+              </div>
+            </div>
+            <div :class="['grid-status-item', 'vector', item.vector_indexed === 'done' ? 'active' : 'pending']">
+              <div class="grid-status-header">
+                <el-icon><Connection /></el-icon>
+                <span class="grid-status-label">语义搜索</span>
+              </div>
+              <div class="grid-status-value">{{ item.vector_indexed === 'done' ? '已完成' : '待处理' }}</div>
+              <div class="status-actions">
+                <el-button size="small" type="success" @click.stop="retryProcess(item, 'vector')">重建</el-button>
+                <el-button size="small" type="danger" @click.stop="clearProcess(item, 'vector')">清空</el-button>
+              </div>
+            </div>
+            <div :class="['grid-status-item', 'graph', item.graph_indexed === 'done' ? 'active' : 'pending']">
+              <div class="grid-status-header">
+                <el-icon><Grid /></el-icon>
+                <span class="grid-status-label">知识图谱</span>
+              </div>
+              <div class="grid-status-value">{{ item.graph_indexed === 'done' ? '已完成' : '待处理' }}</div>
+              <div class="status-actions">
+                <el-button size="small" type="success" @click.stop="retryProcess(item, 'graph')">重建</el-button>
+                <el-button size="small" type="danger" @click.stop="clearProcess(item, 'graph')">清空</el-button>
+              </div>
+            </div>
+          </div>
+          <div class="grid-card-footer">
+            <div></div>
+            <div class="grid-card-actions">
+              <el-button circle type="primary" size="small" @click.stop="viewFile(item)">
+                <el-icon><View /></el-icon>
+              </el-button>
+              <el-button circle type="success" size="small" @click.stop="editItem(item)">
+                <el-icon><Edit /></el-icon>
+              </el-button>
+              <el-button circle type="danger" size="small" @click.stop="deleteItem(item)">
+                <el-icon><Delete /></el-icon>
+              </el-button>
+            </div>
+          </div>
+        </div>
+        <el-empty v-if="knowledgeList.length === 0" description="暂无知识内容" />
+      </div>
+
+      <!-- 分页 -->
+      <div class="pagination-wrapper">
+        <el-pagination
+          v-model:current-page="pagination.page"
+          v-model:page-size="pagination.pageSize"
+          :total="pagination.total"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="loadData"
+          @current-change="loadData"
+        />
+      </div>
     </div>
 
     <!-- 分类管理弹窗 -->
@@ -363,10 +368,7 @@
         </el-form-item>
         <el-form-item label="分类" required>
           <el-select v-model="uploadForm.category" placeholder="请选择分类">
-            <el-option label="法律法规" value="law" />
-            <el-option label="技术标准" value="tech" />
-            <el-option label="执法案例" value="case" />
-            <el-option label="政策文件" value="policy" />
+            <el-option v-for="cat in flatCategoryList" :key="cat.id" :label="cat.name" :value="String(cat.id)" />
           </el-select>
         </el-form-item>
         <el-form-item label="来源">
@@ -395,10 +397,7 @@
         </el-form-item>
         <el-form-item label="分类" required>
           <el-select v-model="textForm.category" placeholder="请选择分类">
-            <el-option label="法律法规" value="law" />
-            <el-option label="技术标准" value="tech" />
-            <el-option label="执法案例" value="case" />
-            <el-option label="政策文件" value="policy" />
+            <el-option v-for="cat in flatCategoryList" :key="cat.id" :label="cat.name" :value="String(cat.id)" />
           </el-select>
         </el-form-item>
         <el-form-item label="来源">
@@ -456,7 +455,7 @@ import {
   Document, Search, Connection, Grid, List, View, Edit, Delete,
   Upload, Clock, Folder, UploadFilled
 } from '@element-plus/icons-vue'
-import { knowledgeApi } from '@/api/index.js'
+import { knowledgeApi, categoryApi } from '@/api/index.js'
 import { useRouter } from 'vue-router'
 import { QuillEditor } from '@vueup/vue-quill'
 import '@vueup/vue-quill/dist/vue-quill.snow.css'
@@ -534,7 +533,9 @@ const categoryAction = ref('create') // 'create' or 'edit'
 const flatCategoryList = computed(() => {
   const flatten = (cats, result = []) => {
     cats.forEach(cat => {
-      result.push(cat)
+      if (cat.id !== '') { // 跳过"全部"节点
+        result.push(cat)
+      }
       if (cat.children && cat.children.length > 0) {
         flatten(cat.children, result)
       }
@@ -1035,8 +1036,15 @@ onMounted(() => {
 // 加载分类树
 const loadCategoryTree = async () => {
   try {
-    const res = await categoryApi.list()
-    categoryTree.value = res || []
+    const res = await categoryApi.list() || []
+    // 添加"全部"总级别节点
+    categoryTree.value = [{
+      id: '',
+      name: '全部',
+      parent_id: null,
+      level: 0,
+      children: res
+    }]
   } catch (error) {
     console.error('加载分类树失败:', error)
   }
@@ -1044,7 +1052,7 @@ const loadCategoryTree = async () => {
 
 // 分类树节点点击
 const handleCategoryNodeClick = (data) => {
-  filters.category = String(data.id)
+  filters.category = data.id === '' ? '' : String(data.id)
   handleFilter()
 }
 
@@ -1125,44 +1133,177 @@ const handleDeleteCategory = async (data) => {
 }
 
 .category-sidebar {
-  width: 220px;
-  min-width: 220px;
-  background: #fff;
-  border-radius: 8px;
-  padding: 16px;
+  width: 260px;
+  min-width: 260px;
+  background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+  border-radius: 12px;
+  padding: 0;
   height: fit-content;
   max-height: calc(100vh - 150px);
   overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .sidebar-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px 12px 0 0;
+  color: #fff;
   font-weight: 600;
-  color: var(--el-text-color-primary);
+  font-size: 14px;
 }
 
+.sidebar-header .el-button {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+}
+
+.sidebar-header .el-button:hover {
+  color: #fff;
+}
+
+/* 分类树容器 */
+.category-sidebar :deep(.el-tree) {
+  background: transparent;
+  padding: 12px 8px;
+  min-height: 200px;
+}
+
+.category-sidebar :deep(.el-tree-node__content) {
+  height: 38px;
+  border-radius: 8px;
+  margin: 2px 4px;
+  padding-left: 12px !important;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.category-sidebar :deep(.el-tree-node__content:hover) {
+  background: linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 100%);
+  border-color: #c7d2fe;
+}
+
+.category-sidebar :deep(.el-tree-node__content:active) {
+  background: #e0e7ff;
+}
+
+/* 选中节点高亮 */
+.category-sidebar :deep(.el-tree-node.is-current > .el-tree-node__content) {
+  background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%) !important;
+  border-color: #667eea40 !important;
+  box-shadow: 0 0 0 2px #667eea20;
+}
+
+.category-sidebar :deep(.el-tree-node.is-current > .el-tree-node__content .node-label) {
+  color: #667eea;
+  font-weight: 600;
+}
+
+/* 展开/收起图标 */
+.category-sidebar :deep(.el-tree-node__expand-icon) {
+  color: #94a3b8;
+  font-size: 14px;
+  transition: transform 0.3s ease;
+}
+
+.category-sidebar :deep(.el-tree-node__expand-icon.expanded) {
+  transform: rotate(90deg);
+}
+
+/* 叶节点图标 */
+.category-sidebar :deep(.el-tree-node__content:has(.is-leaf)) {
+  padding-left: 28px !important;
+}
+
+/* 树节点整体布局 */
 .tree-node {
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  padding-right: 8px;
+  padding: 0 8px 0 0;
+  gap: 8px;
 }
 
 .node-label {
   flex: 1;
+  font-size: 13px;
+  color: #475569;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.2s;
 }
 
+/* 文件夹图标 */
+.node-icon {
+  width: 18px;
+  height: 18px;
+  margin-right: 8px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.category-sidebar :deep(.el-tree-node__content:hover .node-label) {
+  color: #334155;
+}
+
+/* 操作按钮（编辑/删除） */
 .node-actions {
   display: none;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .tree-node:hover .node-actions {
   display: inline-flex;
-  gap: 4px;
+}
+
+.node-actions .el-button {
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
+  opacity: 0.7;
+  transition: all 0.2s;
+}
+
+.node-actions .el-button:hover {
+  opacity: 1;
+}
+
+/* "全部" 节点特殊样式 */
+.category-sidebar :deep(.el-tree-node__content:has(> .tree-node > .node-label[style*="全部"]) ) {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px dashed #cbd5e1;
+}
+
+.category-sidebar :deep(.el-tree-node__content:has(> .tree-node > .node-label[style*="全部"]) .node-label) {
+  font-weight: 600;
+  color: #64748b;
+}
+
+/* 滚动条美化 */
+.category-sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.category-sidebar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.category-sidebar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.category-sidebar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .main-content {

@@ -12,8 +12,14 @@ const routes = [
   {
     path: '/',
     component: Layout,
-    redirect: '/knowledge/search',
+    redirect: '/portal',
     children: [
+      {
+        path: 'portal',
+        name: 'Portal',
+        component: () => import('@/views/portal/PortalPage.vue'),
+        meta: { title: '系统门户', icon: 'DataAnalysis' }
+      },
       {
         path: 'knowledge/search',
         name: 'KnowledgeSearch',

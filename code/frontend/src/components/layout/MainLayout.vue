@@ -14,6 +14,11 @@
         router
         class="sidebar-menu"
       >
+        <el-menu-item index="/portal">
+          <el-icon><DataAnalysis /></el-icon>
+          <span>数据概览</span>
+        </el-menu-item>
+
         <el-sub-menu index="knowledge">
           <template #title>
             <el-icon><Reading /></el-icon>

@@ -65,13 +65,14 @@ def create_category(
 ):
     """创建分类"""
     # 如果有父分类，验证父分类存在并计算层级
-    parent_id = int(category_data.parent_id) if category_data.parent_id else None
-    if parent_id:
+    parent_id = category_data.parent_id
+    if parent_id is not None:
         parent = db.query(Category).filter(Category.id == parent_id).first()
         if not parent:
             raise HTTPException(status_code=400, detail="父分类不存在")
         level = parent.level + 1
     else:
+        parent_id = None
         level = category_data.level
 
     category = Category(
@@ -103,13 +104,13 @@ def update_category(
         category.name = category_data.name
     if category_data.parent_id is not None:
         # 防止将自己设为父分类
-        if str(category_data.parent_id) == str(category_id):
+        if category_data.parent_id == category_id:
             raise HTTPException(status_code=400, detail="不能将自己设为父分类")
         # 验证父分类存在
-        parent = db.query(Category).filter(Category.id == int(category_data.parent_id)).first()
+        parent = db.query(Category).filter(Category.id == category_data.parent_id).first()
         if not parent:
             raise HTTPException(status_code=400, detail="父分类不存在")
-        category.parent_id = int(category_data.parent_id)
+        category.parent_id = category_data.parent_id
         category.level = parent.level + 1
     if category_data.level is not None:
         category.level = category_data.level

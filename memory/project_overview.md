@@ -3,7 +3,7 @@ name: 住建知识库项目概述
 description: 海南省住建知识库项目，技术栈、架构、关键路径等核心信息
 type: project
 originSessionId: c9493d03-2404-41fa-8b7b-c4643b1160bc
-lastUpdated: 2026-05-02
+lastUpdated: 2026-05-03
 ---
 
 # 海南省住建知识库系统
@@ -148,6 +148,28 @@ code/
 | `code/frontend/src/views/graph/GraphExplorer.vue` | 图谱浏览页面 |
 | `code/frontend/src/views/graph/GraphQAChat.vue` | 图谱增强问答页面 |
 | `code/frontend/src/views/knowledge/KnowledgeManageNew.vue` | 知识管理新界面（含预览功能） |
+
+## 2026-05-03 更新
+
+### 分类树功能开发
+
+**新增文件**：
+- `app/models/category.py` - Category 模型
+- `app/api/v1/category.py` - 分类 CRUD API
+- `app/schemas/category.py` - Pydantic Schema
+
+**功能**：
+- 多层级分类树形结构
+- 左侧 220px 分类树侧边栏
+- 新增/编辑/删除分类弹窗
+- 点击分类节点筛选知识列表
+
+**Bug 修复**：
+- `categoryApi is not defined` - 导入缺失
+- 页面布局错乱 - template 结构错误导致所有内容排成一列
+- `asyncio.create_task` 在同步函数中不执行 - 改用 threading.Thread
+
+---
 
 ## 2026-05-02 更新
 
