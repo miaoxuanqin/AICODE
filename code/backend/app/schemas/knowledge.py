@@ -52,14 +52,14 @@ class KnowledgeCreate(BaseModel):
     title: str
     content: str
     summary: Optional[str] = None
-    category: str = Field(..., pattern="^(law|tech|case|policy)$")
+    category: Optional[str] = None  # 支持数字分类ID或law/tech/case/policy
     source: Optional[str] = None
     tags: Optional[List[str]] = []
 
 
 class KnowledgeUpdate(BaseModel):
     title: Optional[str] = None
-    category: Optional[str] = Field(None, pattern="^(law|tech|case|policy)$")
+    category: Optional[str] = None  # 支持数字分类ID或law/tech/case/policy
     source: Optional[str] = None
     tags: Optional[List[str]] = None
 
