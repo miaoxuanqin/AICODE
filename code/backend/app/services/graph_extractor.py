@@ -430,7 +430,7 @@ class GraphExtractor:
 
     def delete_from_neo4j(self, knowledge_id: str) -> Dict[str, Any]:
         """
-        从 Neo4j 删除与知识关联的实体（只删除无其他引用的实体）
+        从 Neo4j 强制删除与知识关联的所有实体（不管是否被其他知识引用）
 
         Args:
             knowledge_id: 知识ID
@@ -439,7 +439,7 @@ class GraphExtractor:
             删除结果统计
         """
         neo4j = get_neo4j_service()
-        return neo4j.remove_knowledge_reference(knowledge_id)
+        return neo4j.force_delete_knowledge_reference(knowledge_id)
 
     def _infer_label(
         self,

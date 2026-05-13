@@ -1,27 +1,30 @@
 @echo off
 chcp 65001 >nul
 echo ====================================
-echo 知识库系统开发环境启动
+echo Knowledge Base System Dev Launcher
 echo ====================================
 
 echo.
-echo [1/2] 启动后端服务 (端口 8001)...
-cd /d %~dp0code\backend
-start "Backend" cmd /c "python -m uvicorn app.main:app --host 0.0.0.0 --port 8001"
+echo [1/2] Starting backend (port 8000)...
+cd /d C:\AICODE3\code\backend
+start "Backend" cmd /k "python -m uvicorn app.main:app --host 0.0.0.0 --port 8000"
 
-echo 等待后端启动...
-timeout /t 3 /nobreak >nul
+echo Waiting for backend to initialize...
+timeout /t 4 /nobreak >nul
 
 echo.
-echo [2/2] 启动前端服务 (端口 3000)...
-cd /d %~dp0code\frontend
-start "Frontend" cmd /c "npm run dev"
+echo [2/2] Starting frontend (port 3000)...
+cd /d C:\AICODE3\code\frontend
+start "Frontend" cmd /k "npm run dev"
 
 echo.
 echo ====================================
-echo 启动完成！
-echo 前端: http://localhost:3000
-echo 后端: http://localhost:8001
-echo API文档: http://localhost:8001/docs
+echo Startup complete!
+echo Frontend: http://localhost:3000
+echo Backend:  http://localhost:8000
+echo API Docs:  http://localhost:8000/docs
 echo ====================================
-pause
+echo.
+echo NOTE: Close the Backend and Frontend windows to stop services
+echo Press any key to exit this launcher...
+pause >nul

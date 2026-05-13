@@ -353,7 +353,8 @@ class Neo4jService:
 
         # 找到该知识引用的所有实体
         query = """
-        MATCH (n)-[r:EXTRACTED_FROM]->(k {knowledge_id: $knowledge_id})
+        MATCH (n)-[r:EXTRACTED_FROM]->(k)
+        WHERE k.knowledge_id = $knowledge_id
         RETURN n, labels(n)[0] AS label
         """
 
@@ -399,6 +400,62 @@ class Neo4jService:
 
         except Exception as e:
             print(f"remove_knowledge_reference 失败: {e}")
+
+        return stats
+
+    def force_delete_knowledge_reference(self, knowledge_id: str) -> Dict[str, Any]:
+        """
+        强制删除知识关联的所有实体（不管是否被其他知识引用）
+
+        Args:
+            knowledge_id: 知识ID
+
+        Returns:
+            删除结果统计
+        """
+        stats = {
+            "entities_checked": 0,
+            "entities_deleted": 0,
+            "relations_deleted": 0
+        }
+
+        # 找到该知识引用的所有实体
+        query = """
+        MATCH (n)-[r:EXTRACTED_FROM]->(k)
+        WHERE k.knowledge_id = $knowledge_id
+        RETURN n.name as name, labels(n)[0] AS label
+        """
+
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, knowledge_id=knowledge_id)
+                entities = [(record["name"], record["label"]) for record in result]
+
+                stats["entities_checked"] = len(entities)
+                stats["relations_deleted"] = len(entities)
+
+                # 删除所有 EXTRACTED_FROM 关系
+                delete_rels_query = """
+                MATCH (n)-[r:EXTRACTED_FROM]->(k)
+                WHERE k.knowledge_id = $knowledge_id
+                DELETE r
+                """
+                session.run(delete_rels_query, knowledge_id=knowledge_id)
+
+                # 强制删除所有关联实体（不管是否被其他知识引用）
+                deleted_names = set()
+                for name, label in entities:
+                    if name and name not in deleted_names:
+                        delete_node_query = f"""
+                        MATCH (n:{label} {{name: $name}})
+                        DETACH DELETE n
+                        """
+                        session.run(delete_node_query, name=name)
+                        deleted_names.add(name)
+                        stats["entities_deleted"] += 1
+
+        except Exception as e:
+            print(f"force_delete_knowledge_reference 失败: {e}")
 
         return stats
 

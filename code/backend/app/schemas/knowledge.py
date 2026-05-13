@@ -93,7 +93,7 @@ class CommentCreate(BaseModel):
 class CommentItem(BaseModel):
     id: str
     knowledge_id: str
-    user_id: str
+    user_id: int
     user_name: Optional[str] = None
     content: str
     created_at: datetime

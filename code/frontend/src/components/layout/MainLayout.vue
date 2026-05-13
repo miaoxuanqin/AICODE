@@ -177,7 +177,7 @@ const handleUserCommand = (command) => {
     router.push('/login')
     ElMessage.success('已退出登录')
   } else if (command === 'profile') {
-    ElMessage.info('个人中心功能开发中')
+    router.push('/user/center')
   }
 }
 

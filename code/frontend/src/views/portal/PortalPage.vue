@@ -1145,6 +1145,13 @@ const updateSourceChart = () => {
   }
 }
 
+// 更新动态图
+const updateActivityChart = () => {
+  if (activityChart) {
+    activityChart.resize()
+  }
+}
+
 // 刷新数据
 const refreshData = async () => {
   refreshing.value = true

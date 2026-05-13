@@ -1138,8 +1138,9 @@ const handleDeleteCategory = async (data) => {
   background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
   border-radius: 12px;
   padding: 0;
-  height: fit-content;
-  max-height: calc(100vh - 150px);
+  position: sticky;
+  top: 24px;
+  max-height: calc(100vh - 48px);
   overflow-y: auto;
   border: 1px solid #e2e8f0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);

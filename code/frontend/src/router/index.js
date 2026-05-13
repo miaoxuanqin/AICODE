@@ -75,6 +75,12 @@ const routes = [
         meta: { title: '问答助手', icon: 'ChatDotRound' }
       },
       {
+        path: 'user/center',
+        name: 'UserCenter',
+        component: () => import('@/views/UserCenter.vue'),
+        meta: { title: '个人中心', icon: 'User' }
+      },
+      {
         path: 'system/users',
         name: 'UserManagement',
         component: () => import('@/views/system/UserManagement.vue'),

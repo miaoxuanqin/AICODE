@@ -155,3 +155,130 @@ def assign_user_roles(
 
     db.commit()
     return {"message": "角色分配成功"}
+
+
+@router.get("/{user_id}/favorites")
+def list_user_favorites(
+    user_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取用户收藏列表"""
+    # 只能查看自己的收藏，或管理员可以查看
+    is_admin = current_user.is_superuser == 1
+    if not is_admin and str(current_user.id) != user_id:
+        raise HTTPException(status_code=403, detail="无权访问")
+
+    from app.models.knowledge import UserFavorite, Knowledge
+
+    total = db.query(UserFavorite).filter(UserFavorite.user_id == user_id).count()
+    favorites = db.query(UserFavorite).filter(
+        UserFavorite.user_id == user_id
+    ).order_by(UserFavorite.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+
+    items = []
+    for f in favorites:
+        knowledge = db.query(Knowledge).filter(Knowledge.id == f.knowledge_id).first()
+        if knowledge:
+            items.append({
+                "id": f.id,
+                "knowledge_id": f.knowledge_id,
+                "title": knowledge.title,
+                "summary": knowledge.summary,
+                "category": knowledge.category,
+                "category_name": knowledge.category,
+                "file_type": knowledge.file_type,
+                "favorited_at": f.created_at
+            })
+
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+@router.delete("/{user_id}/favorites/{knowledge_id}")
+def delete_user_favorite(
+    user_id: str,
+    knowledge_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """取消收藏"""
+    is_admin = current_user.is_superuser == 1
+    if not is_admin and str(current_user.id) != user_id:
+        raise HTTPException(status_code=403, detail="无权访问")
+
+    from app.models.knowledge import UserFavorite
+
+    favorite = db.query(UserFavorite).filter(
+        UserFavorite.user_id == user_id,
+        UserFavorite.knowledge_id == knowledge_id
+    ).first()
+
+    if not favorite:
+        raise HTTPException(status_code=404, detail="收藏不存在")
+
+    db.delete(favorite)
+    db.commit()
+    return {"message": "已取消收藏"}
+
+
+@router.get("/{user_id}/comments")
+def list_user_comments(
+    user_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """获取用户评论列表"""
+    is_admin = current_user.is_superuser == 1
+    if not is_admin and str(current_user.id) != user_id:
+        raise HTTPException(status_code=403, detail="无权访问")
+
+    from app.models.knowledge import KnowledgeComment, Knowledge
+
+    total = db.query(KnowledgeComment).filter(KnowledgeComment.user_id == user_id).count()
+    comments = db.query(KnowledgeComment).filter(
+        KnowledgeComment.user_id == user_id
+    ).order_by(KnowledgeComment.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+
+    items = []
+    for c in comments:
+        knowledge = db.query(Knowledge).filter(Knowledge.id == c.knowledge_id).first()
+        items.append({
+            "id": c.id,
+            "knowledge_id": c.knowledge_id,
+            "knowledge_title": knowledge.title if knowledge else "未知",
+            "content": c.content,
+            "created_at": c.created_at
+        })
+
+    return {"items": items, "total": total, "page": page, "page_size": page_size}
+
+
+@router.delete("/{user_id}/comments/{comment_id}")
+def delete_user_comment(
+    user_id: str,
+    comment_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """删除评论"""
+    is_admin = current_user.is_superuser == 1
+    if not is_admin and str(current_user.id) != user_id:
+        raise HTTPException(status_code=403, detail="无权访问")
+
+    from app.models.knowledge import KnowledgeComment
+
+    comment = db.query(KnowledgeComment).filter(
+        KnowledgeComment.id == comment_id,
+        KnowledgeComment.user_id == user_id
+    ).first()
+
+    if not comment:
+        raise HTTPException(status_code=404, detail="评论不存在")
+
+    db.delete(comment)
+    db.commit()
+    return {"message": "评论已删除"}

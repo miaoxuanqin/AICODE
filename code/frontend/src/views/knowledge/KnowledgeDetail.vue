@@ -6,7 +6,7 @@
           <el-button :icon="Star" :type="knowledge.is_favorited ? 'warning' : 'default'" @click="toggleFavorite">
             {{ knowledge.is_favorited ? '已收藏' : '收藏' }}
           </el-button>
-          <el-button :icon="ChatLineSquare" @click="showCommentDialog = true">评论</el-button>
+          <el-button :icon="ChatLineSquare" @click="scrollToComments">评论</el-button>
         </div>
       </template>
     </el-page-header>
@@ -48,7 +48,7 @@
         </div>
 
         <!-- 评论区 -->
-        <div class="comments card-container">
+        <div id="comments-section" class="comments card-container">
           <h3>评论 ({{ comments.length }})</h3>
 
           <div class="comment-form">
@@ -149,7 +149,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -208,6 +208,10 @@ const loadKnowledgeDetail = async () => {
   loading.value = true
   try {
     const id = route.params.id
+    if (!id) {
+      loading.value = false
+      return
+    }
     const res = await knowledgeApi.get(id)
     Object.assign(knowledge, res)
   } catch (error) {
@@ -221,6 +225,7 @@ const loadKnowledgeDetail = async () => {
 const loadComments = async () => {
   try {
     const id = route.params.id
+    if (!id) return
     comments.value = await knowledgeApi.comments(id)
   } catch (error) {
     console.error('加载评论失败', error)
@@ -282,9 +287,22 @@ const goToRelated = (id) => {
   router.push(`/knowledge/detail/${id}`)
 }
 
-onMounted(() => {
-  loadKnowledgeDetail()
-  loadComments()
+const scrollToComments = () => {
+  document.getElementById('comments-section')?.scrollIntoView({ behavior: 'smooth' })
+}
+
+onMounted(async () => {
+  await loadKnowledgeDetail()
+  if (route.params.id) {
+    await loadComments()
+  }
+})
+
+watch(() => route.params.id, async (newId) => {
+  if (newId) {
+    await loadKnowledgeDetail()
+    await loadComments()
+  }
 })
 </script>
 

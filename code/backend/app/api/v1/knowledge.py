@@ -7,6 +7,7 @@ import redis
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, Path
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import Optional, List
 
 from app.config import get_settings
@@ -666,12 +667,13 @@ def get_portal_stats(
     graph_nodes = base_query.filter(Knowledge.graph_indexed == "done").count()
 
     # 分类统计
-    category_stats = db.query(
+    category_query = db.query(
         Knowledge.category,
         func.count(Knowledge.id).label('count')
-    ).filter(
-        Knowledge.user_id == str(current_user.id) if not is_admin else True
-    ).group_by(Knowledge.category).all()
+    )
+    if not is_admin:
+        category_query = category_query.filter(Knowledge.user_id == str(current_user.id))
+    category_stats = category_query.group_by(Knowledge.category).all()
 
     CATEGORY_NAMES = {
         "law": "法律法规",
@@ -689,13 +691,13 @@ def get_portal_stats(
     ]
 
     # 来源统计 TOP10
-    source_stats = db.query(
+    source_query = db.query(
         Knowledge.source,
         func.count(Knowledge.id).label('count')
-    ).filter(
-        Knowledge.source.isnot(None),
-        Knowledge.user_id == str(current_user.id) if not is_admin else True
-    ).group_by(Knowledge.source).order_by(func.count(Knowledge.id).desc()).limit(10).all()
+    ).filter(Knowledge.source.isnot(None))
+    if not is_admin:
+        source_query = source_query.filter(Knowledge.user_id == str(current_user.id))
+    source_stats = source_query.group_by(Knowledge.source).order_by(func.count(Knowledge.id).desc()).limit(10).all()
 
     sources = [
         SourceStatsItem(source=s.source or "未知", count=s.count)
@@ -703,13 +705,12 @@ def get_portal_stats(
     ]
 
     # 标签统计 TOP15
-    # 由于 tags 是 JSON 数组，需要在 Python 中处理
+    tag_query = db.query(Knowledge.tags).filter(Knowledge.tags.isnot(None))
+    if not is_admin:
+        tag_query = tag_query.filter(Knowledge.user_id == str(current_user.id))
+    tag_rows = tag_query.all()
     tag_count_map = {}
-    tag_query = db.query(Knowledge.tags).filter(
-        Knowledge.tags.isnot(None),
-        Knowledge.user_id == str(current_user.id) if not is_admin else True
-    ).all()
-    for row in tag_query:
+    for row in tag_rows:
         if row.tags:
             for tag in row.tags:
                 tag_count_map[tag] = tag_count_map.get(tag, 0) + 1
@@ -723,10 +724,10 @@ def get_portal_stats(
     trend_query = db.query(
         func.date(Knowledge.created_at).label('date'),
         func.count(Knowledge.id).label('count')
-    ).filter(
-        Knowledge.created_at >= thirty_days_ago,
-        Knowledge.user_id == str(current_user.id) if not is_admin else True
-    ).group_by(func.date(Knowledge.created_at)).order_by(func.date(Knowledge.created_at)).all()
+    ).filter(Knowledge.created_at >= thirty_days_ago)
+    if not is_admin:
+        trend_query = trend_query.filter(Knowledge.user_id == str(current_user.id))
+    trend_query = trend_query.group_by(func.date(Knowledge.created_at)).order_by(func.date(Knowledge.created_at)).all()
 
     # 构建趋势数据，补充0值
     trend_map = {str(t.date): t.count for t in trend_query}
@@ -737,19 +738,34 @@ def get_portal_stats(
         trend.append(TrendStatsItem(date=d, new_count=new_count, index_count=int(new_count * 0.9)))
 
     # 索引状态分布
+    index_status_query = db.query(
+        Knowledge.category,
+        Knowledge.es_indexed,
+        func.count(Knowledge.id).label('count')
+    )
+    if not is_admin:
+        index_status_query = index_status_query.filter(Knowledge.user_id == str(current_user.id))
+    index_status_query = index_status_query.group_by(Knowledge.category, Knowledge.es_indexed).all()
+
+    # 按分类聚合状态
+    status_map = {}
+    for row in index_status_query:
+        cat = row.category
+        if cat not in status_map:
+            status_map[cat] = {'completed': 0, 'in_progress': 0, 'pending': 0, 'failed': 0}
+        status_col = 'completed' if row.es_indexed == 'indexed' else ('in_progress' if row.es_indexed == 'pending' else ('failed' if row.es_indexed == 'failed' else 'pending'))
+        status_map[cat][status_col] += row.count
+
     index_status = []
     for cat, cat_name in CATEGORY_NAMES.items():
-        cat_query = db.query(Knowledge).filter(
-            Knowledge.category == cat,
-            Knowledge.user_id == str(current_user.id) if not is_admin else True
-        )
+        stats = status_map.get(cat, {'completed': 0, 'in_progress': 0, 'pending': 0, 'failed': 0})
         index_status.append(IndexStatusItem(
             category=cat,
             category_name=cat_name,
-            completed=cat_query.filter(Knowledge.es_indexed == "indexed").count(),
-            in_progress=cat_query.filter(Knowledge.es_indexed == "pending").count(),
-            pending=0,
-            failed=cat_query.filter(Knowledge.es_indexed == "failed").count()
+            completed=stats['completed'],
+            in_progress=stats['in_progress'],
+            pending=stats['pending'],
+            failed=stats['failed']
         ))
 
     return PortalStatsResponse(
@@ -825,34 +841,51 @@ def get_index_progress(
 ):
     """获取索引进度"""
     is_admin = current_user.is_superuser == 1
+    # 一次查询获取所有索引状态统计
+    status_query = db.query(
+        Knowledge.es_indexed,
+        Knowledge.vector_indexed,
+        Knowledge.graph_indexed,
+        func.count(Knowledge.id).label('count')
+    )
+    if not is_admin:
+        status_query = status_query.filter(Knowledge.user_id == str(current_user.id))
+    status_stats = status_query.group_by(
+        Knowledge.es_indexed, Knowledge.vector_indexed, Knowledge.graph_indexed
+    ).all()
 
-    # 基础查询
-    if is_admin:
-        base_query = db.query(Knowledge)
-    else:
-        base_query = db.query(Knowledge).filter(Knowledge.user_id == str(current_user.id))
+    # 汇总计数
+    es_indexed = es_pending = es_failed = 0
+    vector_done = vector_pending = vector_failed = 0
+    graph_done = graph_pending = graph_failed = 0
 
-    total = base_query.count()
+    for row in status_stats:
+        # ES索引状态
+        if row.es_indexed == 'indexed':
+            es_indexed += row.count
+        elif row.es_indexed == 'pending':
+            es_pending += row.count
+        elif row.es_indexed == 'failed':
+            es_failed += row.count
+        # 向量索引状态
+        if row.vector_indexed == 'done':
+            vector_done += row.count
+        elif row.vector_indexed == 'pending':
+            vector_pending += row.count
+        elif row.vector_indexed == 'failed':
+            vector_failed += row.count
+        # 图谱索引状态
+        if row.graph_indexed == 'done':
+            graph_done += row.count
+        elif row.graph_indexed == 'pending':
+            graph_pending += row.count
+        elif row.graph_indexed == 'failed':
+            graph_failed += row.count
 
-    # 全文索引进度
-    es_indexed = base_query.filter(Knowledge.es_indexed == "indexed").count()
-    es_pending = base_query.filter(Knowledge.es_indexed == "pending").count()
-    es_failed = base_query.filter(Knowledge.es_indexed == "failed").count()
     es_total = es_indexed + es_pending + es_failed
-
-    # 向量索引进度
-    vector_done = base_query.filter(Knowledge.vector_indexed == "done").count()
-    vector_pending = base_query.filter(Knowledge.vector_indexed == "pending").count()
-    vector_failed = base_query.filter(Knowledge.vector_indexed == "failed").count()
     vector_total = vector_done + vector_pending + vector_failed
-
-    # 知识图谱进度
-    graph_done = base_query.filter(Knowledge.graph_indexed == "done").count()
-    graph_pending = base_query.filter(Knowledge.graph_indexed == "pending").count()
-    graph_failed = base_query.filter(Knowledge.graph_indexed == "failed").count()
     graph_total = graph_done + graph_pending + graph_failed
 
-    # 计算百分比
     def calc_pct(current, total):
         if total == 0:
             return 0.0
