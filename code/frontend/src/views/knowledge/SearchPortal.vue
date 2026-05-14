@@ -168,6 +168,8 @@
           <el-empty v-if="!latestKnowledge.length" description="暂无数据" :image-size="60" />
         </div>
       </el-card>
+    </div>
+
     <!-- 知识详情弹窗 -->
     <KnowledgeDetailModal v-model="showDetailModal" :knowledge-id="currentDetailId" />
   </div>

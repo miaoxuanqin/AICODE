@@ -176,7 +176,7 @@ const submitComment = async () => {
   if (!knowledge.value) return
   commentLoading.value = true
   try {
-    await knowledgeApi.comment(knowledge.value.id, { content: newComment.value })
+    await knowledgeApi.addComment(knowledge.value.id, newComment.value)
     newComment.value = ''
     await loadComments(knowledge.value.id)
     ElMessage.success('评论成功')

@@ -234,6 +234,7 @@
         </el-card>
       </el-col>
     </el-row>
+  </div>
 
   <!-- 知识详情弹窗 -->
   <KnowledgeDetailModal v-model="showDetailModal" :knowledge-id="currentDetailId" />
