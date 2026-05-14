@@ -35,6 +35,28 @@
 
           <el-divider />
 
+          <!-- 文件预览区域 -->
+          <div v-if="hasFile" class="file-preview-section">
+            <el-tabs v-model="activePreviewTab" type="border-card">
+              <el-tab-pane label="文件预览" name="preview">
+                <div v-if="previewItem.loading" class="preview-loading">
+                  <el-icon class="is-loading"><Loading /></el-icon>
+                  正在加载文件预览...
+                </div>
+                <div v-else-if="previewItem.error" class="preview-error">
+                  {{ previewItem.error }}
+                </div>
+                <!-- PDF预览容器 -->
+                <div v-show="previewItem.type === 'pdf'" id="pdf-preview-container-detail" class="pdf-preview-container"></div>
+                <!-- Word预览容器 -->
+                <div v-show="previewItem.type === 'docx'" class="word-preview-container" v-html="wordContent"></div>
+                <div v-if="!previewItem.type && hasFile" class="no-preview">
+                  暂无预览内容
+                </div>
+              </el-tab-pane>
+            </el-tabs>
+          </div>
+
           <div class="content-body" v-html="knowledge.content"></div>
 
           <el-divider />
@@ -149,12 +171,17 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
-  Star, ChatLineSquare, Document, Calendar, View, CaretTop
+  Star, ChatLineSquare, Document, Calendar, View, CaretTop, Loading
 } from '@element-plus/icons-vue'
+import mammoth from 'mammoth'
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
+
+// 为 legacy build 设置 workerSrc
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href
 import { knowledgeApi } from '@/api'
 
 const router = useRouter()
@@ -183,6 +210,20 @@ const knowledge = reactive({
 const comments = ref([])
 const relatedKnowledge = ref([])
 
+// 文件预览相关
+const activePreviewTab = ref('preview')
+const wordContent = ref('')
+const previewItem = ref({
+  loading: false,
+  error: null,
+  type: null
+})
+
+// 计算是否有文件需要预览
+const hasFile = computed(() => {
+  return knowledge.file_type && knowledge.file_path
+})
+
 const categoryMap = {
   law: 'danger',
   tech: 'success',
@@ -206,6 +247,8 @@ const formatDate = (dateStr) => {
 
 const loadKnowledgeDetail = async () => {
   loading.value = true
+  previewItem.value = { loading: false, error: null, type: null }
+  wordContent.value = ''
   try {
     const id = route.params.id
     if (!id) {
@@ -214,11 +257,107 @@ const loadKnowledgeDetail = async () => {
     }
     const res = await knowledgeApi.get(id)
     Object.assign(knowledge, res)
+    // 如果有文件，加载预览
+    if (res.file_type && res.file_path) {
+      await loadFilePreview(res)
+    }
   } catch (error) {
     console.error('加载知识详情失败', error)
     ElMessage.error('加载知识详情失败')
   } finally {
     loading.value = false
+  }
+}
+
+// 加载文件预览
+const loadFilePreview = async (item) => {
+  if (!item.file_type || !item.file_path) return
+  previewItem.value.loading = true
+  previewItem.value.error = null
+  previewItem.value.type = item.file_type
+
+  try {
+    const response = await knowledgeApi.download(item.id)
+    // 处理 axios response.data 或直接返回 data 的情况
+    const rawData = response.data || response
+    const blob = new Blob([rawData], {
+      type: item.file_type === 'pdf'
+        ? 'application/pdf'
+        : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    })
+    console.log('文件下载完成, blob size:', blob.size, 'type:', blob.type)
+
+    if (item.file_type === 'pdf') {
+      await renderPdfPreviewDetail(blob)
+    } else if (item.file_type === 'docx') {
+      await renderWordPreviewDetail(blob)
+    }
+  } catch (e) {
+    console.error('文件预览加载失败:', e)
+    previewItem.value.error = '文件预览加载失败'
+  } finally {
+    previewItem.value.loading = false
+  }
+}
+
+// PDF 预览 (详情页)
+const renderPdfPreviewDetail = async (blob) => {
+  console.log('=== Detail Page PDF 预览开始 ===')
+  try {
+    const arrayBuffer = await blob.arrayBuffer()
+    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer })
+    const pdf = await loadingTask.promise
+
+    let container = document.getElementById('pdf-preview-container-detail')
+    let waitCount = 0
+    while (!container && waitCount < 100) {
+      await new Promise(r => setTimeout(r, 100))
+      container = document.getElementById('pdf-preview-container-detail')
+      waitCount++
+    }
+    if (!container) {
+      console.log('PDF容器不存在')
+      return
+    }
+
+    container.innerHTML = ''
+    container.style.overflow = 'auto'
+    container.style.maxHeight = '60vh'
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i)
+      const scale = 1.2
+      const viewport = page.getViewport({ scale })
+
+      const canvas = document.createElement('canvas')
+      canvas.style.display = 'block'
+      canvas.style.margin = '0 auto 10px'
+      canvas.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'
+      const context = canvas.getContext('2d')
+      canvas.height = viewport.height
+      canvas.width = viewport.width
+
+      await page.render({ canvasContext: context, viewport }).promise
+      container.appendChild(canvas)
+    }
+    console.log('=== Detail Page PDF 渲染完成 ===')
+  } catch (error) {
+    console.error('PDF 渲染失败:', error)
+    previewItem.value.error = 'PDF渲染失败'
+  }
+}
+
+// Word 预览 (详情页)
+const renderWordPreviewDetail = async (blob) => {
+  console.log('=== Detail Page Word 预览开始 ===')
+  try {
+    const arrayBuffer = await blob.arrayBuffer()
+    const result = await mammoth.convertToHtml({ arrayBuffer })
+    wordContent.value = result.value
+    console.log('=== Detail Page Word 渲染完成 ===')
+  } catch (error) {
+    console.error('Word 渲染失败:', error)
+    previewItem.value.error = 'Word渲染失败'
   }
 }
 
@@ -520,5 +659,57 @@ watch(() => route.params.id, async (newId) => {
 .card-container {
   background: #fff;
   border-radius: var(--border-radius);
+}
+
+.file-preview-section {
+  margin: 20px 0;
+}
+
+.preview-loading {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+}
+
+.preview-error {
+  text-align: center;
+  padding: 40px;
+  color: #f56c6c;
+}
+
+.pdf-preview-container {
+  padding: 16px;
+  background: #f5f5f5;
+  border-radius: 4px;
+}
+
+.pdf-preview-container canvas {
+  display: block;
+  margin: 0 auto 10px;
+}
+
+.word-preview-container {
+  padding: 16px;
+  background: #f5f5f5;
+  border-radius: 4px;
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.word-preview-container :deep(table) {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.word-preview-container :deep(td),
+.word-preview-container :deep(th) {
+  border: 1px solid #ddd;
+  padding: 8px;
+}
+
+.no-preview {
+  text-align: center;
+  padding: 40px;
+  color: #999;
 }
 </style>
