@@ -413,6 +413,30 @@
       </template>
     </el-dialog>
 
+    <!-- 编辑弹窗 -->
+    <el-dialog v-model="showEditDialog" title="编辑知识" width="500px">
+      <el-form ref="editFormRef" :model="editForm" label-width="80px">
+        <el-form-item label="标题">
+          <el-input v-model="editForm.title" placeholder="请输入知识标题" />
+        </el-form-item>
+        <el-form-item label="分类" required>
+          <el-select v-model="editForm.category" placeholder="请选择分类">
+            <el-option v-for="cat in flatCategoryList" :key="cat.id" :label="cat.name" :value="String(cat.id)" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="来源">
+          <el-input v-model="editForm.source" placeholder="如：国务院令第279号" />
+        </el-form-item>
+        <el-form-item label="标签">
+          <el-input v-model="editForm.tags" placeholder="多个标签用逗号分隔" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showEditDialog = false">取消</el-button>
+        <el-button type="primary" :loading="editLoading" @click="handleEditSave">保存</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 预览弹窗 -->
     <el-dialog v-model="showPreview" title="知识预览" width="900px" top="5vh">
       <div class="preview-header">
@@ -563,6 +587,18 @@ const uploadForm = reactive({
 const textForm = reactive({
   title: '',
   content: '',
+  category: '',
+  source: '',
+  tags: ''
+})
+
+// 编辑表单
+const showEditDialog = ref(false)
+const editFormRef = ref(null)
+const editLoading = ref(false)
+const editForm = reactive({
+  id: '',
+  title: '',
   category: '',
   source: '',
   tags: ''
@@ -925,7 +961,35 @@ const renderWordPreview = async (blob) => {
 
 // 编辑
 const editItem = (item) => {
-  router.push(`/knowledge/detail/${item.id}`)
+  editForm.id = item.id
+  editForm.title = item.title || ''
+  editForm.category = item.category || ''
+  editForm.source = item.source || ''
+  editForm.tags = Array.isArray(item.tags) ? item.tags.join(', ') : (item.tags || '')
+  showEditDialog.value = true
+}
+
+// 保存编辑
+const handleEditSave = async () => {
+  if (!editForm.category) {
+    ElMessage.warning('请选择分类')
+    return
+  }
+  editLoading.value = true
+  try {
+    await knowledgeApi.update(editForm.id, {
+      category: editForm.category,
+      source: editForm.source || null,
+      tags: editForm.tags ? editForm.tags.split(',').map(t => t.trim()).filter(t => t) : []
+    })
+    ElMessage.success('更新成功')
+    showEditDialog.value = false
+    loadData()
+  } catch (e) {
+    ElMessage.error('更新失败')
+  } finally {
+    editLoading.value = false
+  }
 }
 
 // 删除

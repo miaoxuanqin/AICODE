@@ -100,8 +100,22 @@ ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 
-def get_category_name(category: str) -> str:
-    return CATEGORY_NAMES.get(category, category)
+def get_category_name(category: str, db: Session = None) -> str:
+    # 先从字典查（兼容 law/tech/case/policy 旧分类）
+    if category in CATEGORY_NAMES:
+        return CATEGORY_NAMES[category]
+
+    # 字典匹配不上，尝试查数据库（处理数字ID分类情况）
+    if db:
+        try:
+            from app.models.category import Category
+            cat = db.query(Category).filter(Category.id == int(category)).first()
+            if cat:
+                return cat.name
+        except:
+            pass
+
+    return category
 
 
 @router.post("/upload", response_model=KnowledgeUploadResponse)
@@ -380,7 +394,7 @@ def list_knowledge(
                 title=k.title,
                 summary=k.summary,
                 category=k.category,
-                category_name=get_category_name(k.category),
+                category_name=get_category_name(k.category, db),
                 source=k.source,
                 tags=k.tags or [],
                 view_count=k.view_count,
@@ -531,7 +545,7 @@ def search_knowledge(
 
     # 补充分类名称
     for item in result["items"]:
-        item["category_name"] = get_category_name(item["category"])
+        item["category_name"] = get_category_name(item["category"], db)
 
     # 记录热搜词
     try:
@@ -1055,7 +1069,7 @@ def get_knowledge_detail(
         content=content,  # 从ES获取的完整内容
         summary=knowledge.summary,
         category=knowledge.category,
-        category_name=get_category_name(knowledge.category),
+        category_name=get_category_name(knowledge.category, db),
         source=knowledge.source,
         tags=knowledge.tags or [],
         view_count=knowledge.view_count,
