@@ -484,17 +484,11 @@ import { useRouter } from 'vue-router'
 import { QuillEditor } from '@vueup/vue-quill'
 import '@vueup/vue-quill/dist/vue-quill.snow.css'
 import mammoth from 'mammoth'
-import * as pdfjsLib from 'pdfjs-dist'
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
 
-// 延迟设置 worker，等库完全加载
-let pdfWorkerSrc = null
-const setupPdfWorker = () => {
-  if (!pdfWorkerSrc) {
-    pdfWorkerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).href
-    console.log('Worker URL:', pdfWorkerSrc)
-    pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerSrc
-  }
-}
+// 为 legacy build 手动设置 workerSrc（legacy 默认的 ./pdf.worker.mjs 在 Vite 中解析不正确）
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/legacy/build/pdf.worker.min.mjs', import.meta.url).href
+console.log('PDF workerSrc:', pdfjsLib.GlobalWorkerOptions.workerSrc)
 
 const router = useRouter()
 
@@ -882,7 +876,6 @@ const viewFile = async (item) => {
 const renderPdfPreview = async (blob) => {
   console.log('=== renderPdfPreview 开始 ===')
   console.log('blob type:', blob.type, 'size:', blob.size)
-  setupPdfWorker() // 确保 worker 已设置
 
   // 等待容器出现
   let container = document.getElementById('pdf-preview-container')
