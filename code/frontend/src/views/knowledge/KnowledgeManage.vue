@@ -163,6 +163,9 @@
         <el-button type="primary" :loading="submitting" @click="handleManualSubmit">保存</el-button>
       </template>
     </el-dialog>
+
+    <!-- 知识详情弹窗 -->
+    <KnowledgeDetailModal v-model="showDetailModal" :knowledge-id="currentDetailId" />
   </div>
 </template>
 
@@ -175,8 +178,12 @@ import { Upload, Search, Edit } from '@element-plus/icons-vue'
 import { UploadFilled } from '@element-plus/icons-vue'
 import { QuillEditor } from '@vueup/vue-quill'
 import '@vueup/vue-quill/dist/vue-quill.snow.css'
+import KnowledgeDetailModal from '@/components/KnowledgeDetailModal.vue'
 
 const router = useRouter()
+
+const showDetailModal = ref(false)
+const currentDetailId = ref('')
 
 const loading = ref(false)
 const uploading = ref(false)
@@ -319,7 +326,8 @@ const resetUploadForm = () => {
 }
 
 const goToDetail = (id) => {
-  router.push(`/knowledge/detail/${id}`)
+  currentDetailId.value = id
+  showDetailModal.value = true
 }
 
 const handleDelete = async (id) => {

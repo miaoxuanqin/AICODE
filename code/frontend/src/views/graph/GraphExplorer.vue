@@ -439,6 +439,9 @@
         </div>
       </div>
     </el-dialog>
+
+    <!-- 知识详情弹窗 -->
+    <KnowledgeDetailModal v-model="showDetailModal" :knowledge-id="currentDetailId" />
   </div>
 </template>
 
@@ -451,8 +454,12 @@ import {
   Close, Plus, Search, Box, Document, Folder, Refresh, InfoFilled
 } from '@element-plus/icons-vue'
 import { graphApi } from '@/api'
+import KnowledgeDetailModal from '@/components/KnowledgeDetailModal.vue'
 
 const router = useRouter()
+
+const showDetailModal = ref(false)
+const currentDetailId = ref('')
 
 // 节点类型配置
 const nodeTypes = [
@@ -912,15 +919,16 @@ const selectNode = async (node) => {
   }
 }
 
-// 查看节点详情（跳转到知识详情页）
+// 查看节点详情
 const viewNodeDetail = () => {
   if (!selectedNode.value) {
     ElMessage.warning('请先选择一个节点')
     return
   }
-  // 如果节点有关联的知识ID，跳转到知识详情页
+  // 如果节点有关联的知识ID，显示知识详情弹窗
   if (selectedNode.value.knowledge_id) {
-    router.push(`/knowledge/detail/${selectedNode.value.knowledge_id}`)
+    currentDetailId.value = selectedNode.value.knowledge_id
+    showDetailModal.value = true
   } else {
     // 否则显示节点信息
     ElMessage.info(`节点名称: ${selectedNode.value.name}\n类型: ${getNodeTypeName(selectedNode.value.label)}\nID: ${selectedNode.value.id}`)

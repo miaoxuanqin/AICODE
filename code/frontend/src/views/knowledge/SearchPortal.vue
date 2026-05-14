@@ -168,7 +168,8 @@
           <el-empty v-if="!latestKnowledge.length" description="暂无数据" :image-size="60" />
         </div>
       </el-card>
-    </div>
+    <!-- 知识详情弹窗 -->
+    <KnowledgeDetailModal v-model="showDetailModal" :knowledge-id="currentDetailId" />
   </div>
 </template>
 
@@ -179,8 +180,12 @@ import {
   Search, Document, View
 } from '@element-plus/icons-vue'
 import { knowledgeApi } from '@/api'
+import KnowledgeDetailModal from '@/components/KnowledgeDetailModal.vue'
 
 const router = useRouter()
+
+const showDetailModal = ref(false)
+const currentDetailId = ref('')
 
 const searchKeyword = ref('')
 const currentPage = ref(1)
@@ -264,7 +269,8 @@ const handlePageChange = (val) => {
 }
 
 const goToDetail = (id) => {
-  router.push(`/knowledge/detail/${id}`)
+  currentDetailId.value = id
+  showDetailModal.value = true
 }
 
 const loadHotAndLatest = async () => {

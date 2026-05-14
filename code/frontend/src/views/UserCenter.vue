@@ -198,6 +198,9 @@
         </div>
       </el-tab-pane>
     </el-tabs>
+
+    <!-- 知识详情弹窗 -->
+    <KnowledgeDetailModal v-model="showDetailModal" :knowledge-id="currentDetailId" />
   </div>
 </template>
 
@@ -210,8 +213,12 @@ import {
   User, Postcard, OfficeBuilding, Calendar, Star,
   ChatLineSquare, Document, Upload, View
 } from '@element-plus/icons-vue'
+import KnowledgeDetailModal from '@/components/KnowledgeDetailModal.vue'
 
 const router = useRouter()
+
+const showDetailModal = ref(false)
+const currentDetailId = ref('')
 
 // 用户信息
 const userInfo = reactive({
@@ -372,12 +379,14 @@ const handleDeleteComment = async (item) => {
 
 // 跳转知识详情
 const goToDetail = (id) => {
-  router.push(`/knowledge/detail/${id}`)
+  currentDetailId.value = id
+  showDetailModal.value = true
 }
 
 // 跳转知识详情并定位到评论区
 const goToDetailWithComment = (id) => {
-  router.push(`/knowledge/detail/${id}#comments-section`)
+  currentDetailId.value = id
+  showDetailModal.value = true
 }
 
 // 跳转到搜索页

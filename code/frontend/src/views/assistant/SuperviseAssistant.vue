@@ -207,7 +207,9 @@
         </el-card>
       </el-col>
     </el-row>
-  </div>
+
+  <!-- 知识详情弹窗 -->
+  <KnowledgeDetailModal v-model="showDetailModal" :knowledge-id="currentDetailId" />
 </template>
 
 <script setup>
@@ -219,12 +221,16 @@ import {
 import { marked } from 'marked'
 import { qaApi, knowledgeApi } from '@/api'
 import request from '@/api'
+import KnowledgeDetailModal from '@/components/KnowledgeDetailModal.vue'
 
 // 配置 marked
 marked.setOptions({
   breaks: true,
   gfm: true
 })
+
+const showDetailModal = ref(false)
+const currentDetailId = ref('')
 
 const inputMessage = ref('')
 const messages = ref([])
@@ -550,11 +556,13 @@ const cancelRequest = () => {
 }
 
 const viewCard = (card) => {
-  window.location.href = `/knowledge/detail/${card.id}`
+  currentDetailId.value = card.id
+  showDetailModal.value = true
 }
 
 const viewKnowledge = (item) => {
-  window.location.href = `/knowledge/detail/${item.id}`
+  currentDetailId.value = item.id
+  showDetailModal.value = true
 }
 
 const clearHistory = async () => {
